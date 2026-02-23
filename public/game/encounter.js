@@ -1,0 +1,174 @@
+import { Modes } from '../core/state.js';
+import { clamp } from '../core/util.js';
+
+const BOAT_POINT = { x: 200, y: 90 };
+
+export function updateEncounter(state, input, dt) {
+  const encounter = state.encounter;
+  const diver = encounter.diver;
+  encounter.timer += dt;
+
+  const accel = 140;
+  const drag = 0.9;
+  const currentX = Math.sin(state.elapsed * 0.9 + encounter.timer * 0.2) * encounter.currentFactor * 10;
+
+  if (input.down('KeyW') || input.down('ArrowUp')) diver.vy -= accel * dt;
+  if (input.down('KeyS') || input.down('ArrowDown')) diver.vy += accel * dt;
+  if (input.down('KeyA') || input.down('ArrowLeft')) diver.vx -= accel * dt;
+  if (input.down('KeyD') || input.down('ArrowRight')) diver.vx += accel * dt;
+
+  diver.vx += currentX * dt;
+  diver.vx *= drag;
+  diver.vy *= drag;
+
+  diver.x = clamp(diver.x + diver.vx, 40, 980);
+  diver.y = clamp(diver.y + diver.vy, 80, 540);
+  diver.o2 = Math.max(0, diver.o2 - dt * 2.3);
+
+  const depthMeters = Math.max(0, Math.round((diver.y - 80) / 4));
+  if (depthMeters > diver.maxDepth) {
+    diver.o2 = Math.max(0, diver.o2 - dt * 5 * encounter.depthPressure);
+  }
+
+  updateObjectiveProgress(encounter, input, dt);
+
+  if (encounter.objectiveIndex >= encounter.contract.objectives.length && nearPoint(diver, BOAT_POINT, 55) && input.tap('KeyE')) {
+    encounter.done = true;
+    state.lastResult = { success: true, pay: encounter.contract.pay, title: encounter.contract.title };
+    state.money += encounter.contract.pay;
+    state.mode = Modes.RESULTS;
+    return;
+  }
+
+  if (diver.o2 <= 0) {
+    encounter.failed = true;
+    state.lastResult = { success: false, pay: -60, title: encounter.contract.title };
+    state.money = Math.max(0, state.money - 60);
+    state.mode = Modes.RESULTS;
+  }
+}
+
+function updateObjectiveProgress(encounter, input, dt) {
+  const diver = encounter.diver;
+  const objectives = encounter.contract.objectives;
+  const currentObjective = objectives[encounter.objectiveIndex];
+  if (!currentObjective) return;
+
+  encounter.actionHint = `Objective: ${currentObjective.label}`;
+
+  const activeNode = encounter.objectiveNodes.find((node) => !node.done) || encounter.objectiveNodes[encounter.objectiveNodes.length - 1];
+  const nearNode = nearPoint(diver, activeNode, 45);
+  const nearBoat = nearPoint(diver, BOAT_POINT, 55);
+
+  switch (encounter.contract.type) {
+    case 'place_beacons':
+      if (nearNode && input.down('KeyF')) {
+        encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.9, 0, 1);
+      }
+      if (encounter.objectiveProgress >= 1) {
+        activeNode.done = true;
+        encounter.objectiveProgress = 0;
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveIndex += 1;
+      }
+      break;
+    case 'fetch':
+      if (!diver.carrying && nearNode && input.tap('KeyF')) {
+        diver.carrying = true;
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveIndex += 1;
+      } else if (diver.carrying && nearBoat && input.tap('KeyF')) {
+        diver.carrying = false;
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveIndex += 1;
+      }
+      break;
+    case 'rescue':
+      if (!diver.escorting && nearNode && input.down('KeyF')) {
+        encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.5, 0, 1);
+      }
+      if (!diver.escorting && encounter.objectiveProgress >= 1) {
+        diver.escorting = true;
+        encounter.objectiveProgress = 0;
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveIndex += 1;
+      } else if (diver.escorting && nearBoat && input.tap('KeyF')) {
+        diver.escorting = false;
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveIndex += 1;
+      }
+      break;
+    default:
+      if (nearNode && input.down('KeyF')) {
+        encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.45, 0, 1);
+      }
+      if (encounter.objectiveProgress >= 1) {
+        objectives[encounter.objectiveIndex].done = true;
+        encounter.objectiveProgress = 0;
+        encounter.objectiveIndex += 1;
+      }
+      break;
+  }
+}
+
+function nearPoint(a, b, radius) {
+  return Math.hypot(a.x - b.x, a.y - b.y) < radius;
+}
+
+export function renderEncounter(ctx, state, w, h) {
+  const encounter = state.encounter;
+  const diver = encounter.diver;
+
+  ctx.fillStyle = '#091b26';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#1c5472';
+  ctx.fillRect(0, 0, w, 80);
+
+  const bob = Math.sin(state.elapsed * 2.2) * 3;
+  ctx.fillStyle = '#d8e9f8';
+  ctx.fillRect(150, 38 + bob, 95, 24);
+
+  ctx.fillStyle = '#0e2d3e';
+  ctx.fillRect(0, 80, w, h - 80);
+
+  const particles = 40;
+  for (let i = 0; i < particles; i += 1) {
+    const px = (i * 173 + Math.floor(state.elapsed * 30)) % w;
+    const py = 95 + ((i * 89 + Math.floor(state.elapsed * 18 * encounter.siltiness)) % (h - 105));
+    ctx.fillStyle = `rgba(190,220,235,${0.07 * encounter.siltiness})`;
+    ctx.fillRect(px, py, 2, 2);
+  }
+
+  const gradient = ctx.createRadialGradient(diver.x, diver.y, 10, diver.x, diver.y, diver.lampRange);
+  gradient.addColorStop(0, 'rgba(170, 225, 255, 0.30)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 80, w, h - 80);
+
+  encounter.objectiveNodes.forEach((node) => {
+    ctx.fillStyle = node.done ? '#6ec48d' : '#7fb7cf';
+    ctx.fillRect(node.x - 10, node.y - 10, 20, 20);
+  });
+
+  ctx.fillStyle = '#f6fbff';
+  ctx.beginPath();
+  ctx.arc(diver.x, diver.y, 11, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#d4ecff';
+  ctx.font = '16px sans-serif';
+  const depthMeters = Math.max(0, Math.round((diver.y - 80) / 4));
+  ctx.fillText('Encounter - hold F to interact | E extract at boat', 20, 28);
+  ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
+  ctx.fillText(encounter.actionHint, 20, 74);
+
+  renderObjectiveList(ctx, encounter.contract.objectives, encounter.objectiveIndex);
+}
+
+function renderObjectiveList(ctx, objectives, index) {
+  ctx.font = '14px sans-serif';
+  objectives.forEach((objective, i) => {
+    ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 740, 28 + i * 20);
+  });
+}

@@ -1,0 +1,8 @@
+{
+  "startPort": { "x": 320, "y": 260 },
+  "aois": [
+    { "id": "reef_01", "type": "reef", "x": 520, "y": 240, "risk": 1, "depth": 25 },
+    { "id": "kelp_01", "type": "kelp", "x": 680, "y": 360, "risk": 3, "depth": 55 },
+    { "id": "wreck_01", "type": "wreck", "x": 420, "y": 520, "risk": 4, "depth": 85 }
+  ]
+}
