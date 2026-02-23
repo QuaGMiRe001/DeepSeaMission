@@ -41,13 +41,17 @@ function buyUpgrade(state, id, cost) {
   state.upgradesOwned.push(id);
 }
 
-export function renderPort(ctx, state, w, h) {
+export function renderPort(ctx, state, w, h, assets) {
   ctx.fillStyle = '#153547';
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = '#88d7ff';
   ctx.font = '28px sans-serif';
   ctx.fillText('Port - Quiet Harbor', 40, 60);
+
+  if (assets.boat) {
+    ctx.drawImage(assets.boat, 820, 40, 180, 90);
+  }
 
   ctx.font = '18px sans-serif';
   ctx.fillStyle = '#d6f0ff';

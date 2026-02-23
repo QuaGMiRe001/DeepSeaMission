@@ -1,8 +1,20 @@
+const PREVENT_DEFAULT_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space'
+]);
+
 export function createInput() {
   const held = new Set();
   const pressed = new Set();
 
   window.addEventListener('keydown', (e) => {
+    if (PREVENT_DEFAULT_KEYS.has(e.code)) {
+      e.preventDefault();
+    }
+
     if (!held.has(e.code)) {
       pressed.add(e.code);
     }
@@ -10,6 +22,9 @@ export function createInput() {
   });
 
   window.addEventListener('keyup', (e) => {
+    if (PREVENT_DEFAULT_KEYS.has(e.code)) {
+      e.preventDefault();
+    }
     held.delete(e.code);
   });
 

@@ -1,6 +1,7 @@
 import { createGameState, Modes } from './core/state.js';
 import { createInput } from './core/input.js';
 import { clearFrame, drawWaterBackdrop } from './core/render.js';
+import { loadAssets } from './core/assets.js';
 import { updatePort, renderPort } from './game/port.js';
 import { updateMap, renderMap } from './game/map.js';
 import { updateEncounter, renderEncounter } from './game/encounter.js';
@@ -14,7 +15,10 @@ const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
 const input = createInput();
 
-const bootstrap = await fetch('/api/bootstrap').then((r) => r.json());
+const [bootstrap, assets] = await Promise.all([
+  fetch('/api/bootstrap').then((r) => r.json()),
+  loadAssets()
+]);
 const state = createGameState(bootstrap);
 
 let last = performance.now();
@@ -60,13 +64,13 @@ function render() {
 
   switch (state.mode) {
     case Modes.PORT:
-      renderPort(ctx, state, canvas.width, canvas.height);
+      renderPort(ctx, state, canvas.width, canvas.height, assets);
       break;
     case Modes.MAP:
-      renderMap(ctx, state, canvas.width, canvas.height);
+      renderMap(ctx, state, canvas.width, canvas.height, assets);
       break;
     case Modes.ENCOUNTER:
-      renderEncounter(ctx, state, canvas.width, canvas.height);
+      renderEncounter(ctx, state, canvas.width, canvas.height, assets);
       break;
     case Modes.RESULTS:
       renderResults(ctx, state, canvas.width, canvas.height);
@@ -104,9 +108,9 @@ function updateHud() {
       <h3>Controls</h3>
       <p class="small">Move: WASD / Arrows</p>
       <p class="small">Map sonar: SPACE</p>
-      <p class="small">Map engage: E</p>
+      <p class="small">Map engage / extract: E</p>
       <p class="small">Encounter interact: hold F</p>
-      <p class="small">Extract: E near boat after objectives</p>
+      <p class="small">Return to port from map: P</p>
     </section>
   `;
 }

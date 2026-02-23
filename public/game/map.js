@@ -29,7 +29,7 @@ export function updateMap(state, input, dt) {
 
   if (input.tap('Space')) {
     revealNearby(state, 260);
-    state.sonarFlash = 0.4;
+    state.sonarFlash = 0.45;
   }
   state.sonarFlash = Math.max(0, (state.sonarFlash || 0) - dt);
 
@@ -102,7 +102,7 @@ function buildObjectiveNodes(type) {
   return [{ x: 770, y: 430, done: false }];
 }
 
-export function renderMap(ctx, state, w, h) {
+export function renderMap(ctx, state, w, h, assets) {
   ctx.fillStyle = '#0a3045';
   ctx.fillRect(0, 0, w, h);
 
@@ -117,7 +117,7 @@ export function renderMap(ctx, state, w, h) {
   if (state.sonarFlash > 0) {
     ctx.strokeStyle = `rgba(128,220,255,${state.sonarFlash})`;
     ctx.beginPath();
-    ctx.arc(state.boat.x * 0.6, state.boat.y * 0.45, 180 * (0.4 - state.sonarFlash + 0.1), 0, Math.PI * 2);
+    ctx.arc(state.boat.x * 0.6, state.boat.y * 0.45, 240 * (0.45 - state.sonarFlash + 0.1), 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -134,10 +134,16 @@ export function renderMap(ctx, state, w, h) {
     }
   });
 
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(state.boat.x * 0.6, state.boat.y * 0.45, 9, 0, Math.PI * 2);
-  ctx.fill();
+  const bx = state.boat.x * 0.6;
+  const by = state.boat.y * 0.45;
+  if (assets.boat) {
+    ctx.drawImage(assets.boat, bx - 28, by - 16, 56, 28);
+  } else {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(bx, by, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.fillStyle = '#d2efff';
   ctx.font = '16px sans-serif';

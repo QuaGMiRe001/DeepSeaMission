@@ -52,7 +52,10 @@ function updateObjectiveProgress(encounter, input, dt) {
   const diver = encounter.diver;
   const objectives = encounter.contract.objectives;
   const currentObjective = objectives[encounter.objectiveIndex];
-  if (!currentObjective) return;
+  if (!currentObjective) {
+    encounter.actionHint = 'Return to boat and press E to extract';
+    return;
+  }
 
   encounter.actionHint = `Objective: ${currentObjective.label}`;
 
@@ -75,6 +78,7 @@ function updateObjectiveProgress(encounter, input, dt) {
     case 'fetch':
       if (!diver.carrying && nearNode && input.tap('KeyF')) {
         diver.carrying = true;
+        activeNode.done = true;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
       } else if (diver.carrying && nearBoat && input.tap('KeyF')) {
@@ -89,6 +93,7 @@ function updateObjectiveProgress(encounter, input, dt) {
       }
       if (!diver.escorting && encounter.objectiveProgress >= 1) {
         diver.escorting = true;
+        activeNode.done = true;
         encounter.objectiveProgress = 0;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
@@ -103,6 +108,7 @@ function updateObjectiveProgress(encounter, input, dt) {
         encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.45, 0, 1);
       }
       if (encounter.objectiveProgress >= 1) {
+        activeNode.done = true;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveProgress = 0;
         encounter.objectiveIndex += 1;
@@ -115,7 +121,13 @@ function nearPoint(a, b, radius) {
   return Math.hypot(a.x - b.x, a.y - b.y) < radius;
 }
 
-export function renderEncounter(ctx, state, w, h) {
+function objectiveImage(assets, contractType) {
+  if (contractType === 'fetch') return assets.cargo;
+  if (contractType === 'rescue') return assets.rescue;
+  return assets.beacon;
+}
+
+export function renderEncounter(ctx, state, w, h, assets) {
   const encounter = state.encounter;
   const diver = encounter.diver;
 
@@ -125,8 +137,12 @@ export function renderEncounter(ctx, state, w, h) {
   ctx.fillRect(0, 0, w, 80);
 
   const bob = Math.sin(state.elapsed * 2.2) * 3;
-  ctx.fillStyle = '#d8e9f8';
-  ctx.fillRect(150, 38 + bob, 95, 24);
+  if (assets.boat) {
+    ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
+  } else {
+    ctx.fillStyle = '#d8e9f8';
+    ctx.fillRect(150, 38 + bob, 95, 24);
+  }
 
   ctx.fillStyle = '#0e2d3e';
   ctx.fillRect(0, 80, w, h - 80);
@@ -145,15 +161,30 @@ export function renderEncounter(ctx, state, w, h) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 80, w, h - 80);
 
+  const icon = objectiveImage(assets, encounter.contract.type);
   encounter.objectiveNodes.forEach((node) => {
-    ctx.fillStyle = node.done ? '#6ec48d' : '#7fb7cf';
-    ctx.fillRect(node.x - 10, node.y - 10, 20, 20);
+    if (node.done) {
+      ctx.fillStyle = '#6ec48d';
+      ctx.fillRect(node.x - 8, node.y - 8, 16, 16);
+      return;
+    }
+
+    if (icon) {
+      ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
+    } else {
+      ctx.fillStyle = '#7fb7cf';
+      ctx.fillRect(node.x - 10, node.y - 10, 20, 20);
+    }
   });
 
-  ctx.fillStyle = '#f6fbff';
-  ctx.beginPath();
-  ctx.arc(diver.x, diver.y, 11, 0, Math.PI * 2);
-  ctx.fill();
+  if (assets.diver) {
+    ctx.drawImage(assets.diver, diver.x - 14, diver.y - 14, 28, 28);
+  } else {
+    ctx.fillStyle = '#f6fbff';
+    ctx.beginPath();
+    ctx.arc(diver.x, diver.y, 11, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
@@ -169,6 +200,6 @@ function renderObjectiveList(ctx, objectives, index) {
   ctx.font = '14px sans-serif';
   objectives.forEach((objective, i) => {
     ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
-    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 740, 28 + i * 20);
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 700, 28 + i * 20);
   });
 }
