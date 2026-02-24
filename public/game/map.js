@@ -22,8 +22,12 @@ export function updateMap(state, input, dt) {
   state.boat.x = clamp(state.boat.x + state.boat.vx, 20, MAP_W - 20);
   state.boat.y = clamp(state.boat.y + state.boat.vy, 20, MAP_H - 20);
 
-  const moving = Math.abs(state.boat.vx) + Math.abs(state.boat.vy) > 0.05;
-  if (moving) {
+  const speed = Math.hypot(state.boat.vx, state.boat.vy);
+  if (speed > 0.03) {
+    state.boat.heading = Math.atan2(state.boat.vy, state.boat.vx);
+  }
+
+  if (speed > 0.05) {
     state.boat.fuel = Math.max(0, state.boat.fuel - dt * 0.6 * (1 + storm * 0.25));
   }
 
@@ -34,6 +38,8 @@ export function updateMap(state, input, dt) {
   state.sonarFlash = Math.max(0, (state.sonarFlash || 0) - dt);
 
   const nearby = getNearbyAOI(state, 65);
+  state.mapHint = nearby ? `Press E to start mission at ${nearby.type}` : 'Find AOI with sonar pulse [SPACE]';
+
   if (nearby && input.tap('KeyE')) {
     const contract = state.selectedContract?.aoiId === nearby.id
       ? state.selectedContract
@@ -102,6 +108,14 @@ function buildObjectiveNodes(type) {
   return [{ x: 770, y: 430, done: false }];
 }
 
+function drawRotatedBoat(ctx, image, x, y, heading) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(heading || 0);
+  ctx.drawImage(image, -28, -14, 56, 28);
+  ctx.restore();
+}
+
 export function renderMap(ctx, state, w, h, assets) {
   ctx.fillStyle = '#0a3045';
   ctx.fillRect(0, 0, w, h);
@@ -137,7 +151,7 @@ export function renderMap(ctx, state, w, h, assets) {
   const bx = state.boat.x * 0.6;
   const by = state.boat.y * 0.45;
   if (assets.boat) {
-    ctx.drawImage(assets.boat, bx - 28, by - 16, 56, 28);
+    drawRotatedBoat(ctx, assets.boat, bx, by, state.boat.heading || 0);
   } else {
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
@@ -148,4 +162,5 @@ export function renderMap(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d2efff';
   ctx.font = '16px sans-serif';
   ctx.fillText('Map Mode - WASD move | SPACE sonar | E engage AOI | P port', 20, 28);
+  ctx.fillText(state.mapHint || '', 20, 50);
 }

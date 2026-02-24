@@ -2,6 +2,7 @@ import { Modes } from '../core/state.js';
 import { clamp } from '../core/util.js';
 
 const BOAT_POINT = { x: 200, y: 90 };
+const WATERLINE_Y = 80;
 
 export function updateEncounter(state, input, dt) {
   const encounter = state.encounter;
@@ -22,21 +23,20 @@ export function updateEncounter(state, input, dt) {
   diver.vy *= drag;
 
   diver.x = clamp(diver.x + diver.vx, 40, 980);
-  diver.y = clamp(diver.y + diver.vy, 80, 540);
+  diver.y = clamp(diver.y + diver.vy, WATERLINE_Y, 540);
   diver.o2 = Math.max(0, diver.o2 - dt * 2.3);
 
-  const depthMeters = Math.max(0, Math.round((diver.y - 80) / 4));
+  const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
   if (depthMeters > diver.maxDepth) {
     diver.o2 = Math.max(0, diver.o2 - dt * 5 * encounter.depthPressure);
   }
 
   updateObjectiveProgress(encounter, input, dt);
 
-  if (encounter.objectiveIndex >= encounter.contract.objectives.length && nearPoint(diver, BOAT_POINT, 55) && input.tap('KeyE')) {
-    encounter.done = true;
-    state.lastResult = { success: true, pay: encounter.contract.pay, title: encounter.contract.title };
-    state.money += encounter.contract.pay;
-    state.mode = Modes.RESULTS;
+  const atBoat = nearPoint(diver, BOAT_POINT, 55);
+  const objectivesDone = encounter.objectiveIndex >= encounter.contract.objectives.length;
+  if (atBoat && objectivesDone && input.tap('KeyE')) {
+    completeEncounter(state, encounter);
     return;
   }
 
@@ -48,12 +48,23 @@ export function updateEncounter(state, input, dt) {
   }
 }
 
+function completeEncounter(state, encounter) {
+  encounter.done = true;
+  state.lastResult = { success: true, pay: encounter.contract.pay, title: encounter.contract.title };
+  state.money += encounter.contract.pay;
+  state.mode = Modes.RESULTS;
+}
+
 function updateObjectiveProgress(encounter, input, dt) {
   const diver = encounter.diver;
   const objectives = encounter.contract.objectives;
   const currentObjective = objectives[encounter.objectiveIndex];
+  const nearBoat = nearPoint(diver, BOAT_POINT, 55);
+
   if (!currentObjective) {
-    encounter.actionHint = 'Return to boat and press E to extract';
+    encounter.actionHint = nearBoat
+      ? 'Mission complete. Press E to extract.'
+      : 'Return to boat at surface then press E to extract.';
     return;
   }
 
@@ -61,7 +72,6 @@ function updateObjectiveProgress(encounter, input, dt) {
 
   const activeNode = encounter.objectiveNodes.find((node) => !node.done) || encounter.objectiveNodes[encounter.objectiveNodes.length - 1];
   const nearNode = nearPoint(diver, activeNode, 45);
-  const nearBoat = nearPoint(diver, BOAT_POINT, 55);
 
   switch (encounter.contract.type) {
     case 'place_beacons':
@@ -81,7 +91,7 @@ function updateObjectiveProgress(encounter, input, dt) {
         activeNode.done = true;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
-      } else if (diver.carrying && nearBoat && input.tap('KeyF')) {
+      } else if (diver.carrying && nearBoat && (input.tap('KeyF') || input.tap('KeyE'))) {
         diver.carrying = false;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
@@ -97,7 +107,7 @@ function updateObjectiveProgress(encounter, input, dt) {
         encounter.objectiveProgress = 0;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
-      } else if (diver.escorting && nearBoat && input.tap('KeyF')) {
+      } else if (diver.escorting && nearBoat && (input.tap('KeyF') || input.tap('KeyE'))) {
         diver.escorting = false;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
@@ -131,26 +141,31 @@ export function renderEncounter(ctx, state, w, h, assets) {
   const encounter = state.encounter;
   const diver = encounter.diver;
 
-  ctx.fillStyle = '#091b26';
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#1c5472';
-  ctx.fillRect(0, 0, w, 80);
+  ctx.fillStyle = '#9fd5ef';
+  ctx.fillRect(0, 0, w, WATERLINE_Y);
 
   const bob = Math.sin(state.elapsed * 2.2) * 3;
   if (assets.boat) {
     ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
-  } else {
-    ctx.fillStyle = '#d8e9f8';
-    ctx.fillRect(150, 38 + bob, 95, 24);
   }
 
+  ctx.strokeStyle = '#d6f2ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let x = 0; x <= w; x += 24) {
+    const y = WATERLINE_Y + Math.sin((x + state.elapsed * 120) * 0.03) * 3;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
   ctx.fillStyle = '#0e2d3e';
-  ctx.fillRect(0, 80, w, h - 80);
+  ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
 
   const particles = 40;
   for (let i = 0; i < particles; i += 1) {
     const px = (i * 173 + Math.floor(state.elapsed * 30)) % w;
-    const py = 95 + ((i * 89 + Math.floor(state.elapsed * 18 * encounter.siltiness)) % (h - 105));
+    const py = WATERLINE_Y + 15 + ((i * 89 + Math.floor(state.elapsed * 18 * encounter.siltiness)) % (h - WATERLINE_Y - 20));
     ctx.fillStyle = `rgba(190,220,235,${0.07 * encounter.siltiness})`;
     ctx.fillRect(px, py, 2, 2);
   }
@@ -159,7 +174,7 @@ export function renderEncounter(ctx, state, w, h, assets) {
   gradient.addColorStop(0, 'rgba(170, 225, 255, 0.30)');
   gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 80, w, h - 80);
+  ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
 
   const icon = objectiveImage(assets, encounter.contract.type);
   encounter.objectiveNodes.forEach((node) => {
@@ -179,17 +194,12 @@ export function renderEncounter(ctx, state, w, h, assets) {
 
   if (assets.diver) {
     ctx.drawImage(assets.diver, diver.x - 14, diver.y - 14, 28, 28);
-  } else {
-    ctx.fillStyle = '#f6fbff';
-    ctx.beginPath();
-    ctx.arc(diver.x, diver.y, 11, 0, Math.PI * 2);
-    ctx.fill();
   }
 
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
-  const depthMeters = Math.max(0, Math.round((diver.y - 80) / 4));
-  ctx.fillText('Encounter - hold F to interact | E extract at boat', 20, 28);
+  const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
+  ctx.fillText('Encounter - hold F to interact | E can also dock/extract at boat', 20, 28);
   ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 
@@ -200,6 +210,6 @@ function renderObjectiveList(ctx, objectives, index) {
   ctx.font = '14px sans-serif';
   objectives.forEach((objective, i) => {
     ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
-    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 700, 28 + i * 20);
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 680, 28 + i * 20);
   });
 }
