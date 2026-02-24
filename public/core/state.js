@@ -17,6 +17,7 @@ export function createGameState(bootstrap) {
       y: bootstrap.save.boat.mapY,
       vx: 0,
       vy: 0,
+      speed: 0,
       heading: 0,
       fuel: bootstrap.save.boat.fuel,
       hull: bootstrap.save.boat.hull

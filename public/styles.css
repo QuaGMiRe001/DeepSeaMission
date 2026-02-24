@@ -4,6 +4,7 @@
   --panel: #0f202c;
   --ink: #cbe8ff;
   --accent: #36b8ff;
+  --accent2: #79d7ff;
 }
 
 * { box-sizing: border-box; }
@@ -16,7 +17,7 @@ body {
 
 .wrap {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr 300px;
   min-height: 100vh;
 }
 
@@ -35,21 +36,38 @@ canvas {
 
 .card {
   border: 1px solid #244357;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px;
   margin-bottom: 10px;
-  background: rgba(7, 21, 30, 0.8);
+  background: rgba(7, 21, 30, 0.84);
+  box-shadow: 0 0 0 1px rgba(145, 220, 255, 0.08) inset;
 }
 
 h3 { margin: 0 0 8px; }
-.small { opacity: 0.8; font-size: 0.9rem; }
+.small { opacity: 0.9; font-size: 0.9rem; }
 .key { color: var(--accent); font-weight: 700; }
-button {
-  width: 100%;
-  margin-top: 6px;
-  background: #1b4f6b;
-  color: white;
-  border: 0;
-  padding: 8px;
-  border-radius: 8px;
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 38px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
 }
+
+.meter {
+  height: 8px;
+  background: #163040;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #294b60;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+
+ul { margin: 0; padding-left: 16px; }
+li { margin-bottom: 5px; }

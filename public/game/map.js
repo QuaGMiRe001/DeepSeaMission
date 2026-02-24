@@ -3,42 +3,53 @@ import { clamp, dist } from '../core/util.js';
 
 const MAP_W = 1600;
 const MAP_H = 1100;
+const BOAT_SPRITE_FORWARD_OFFSET = Math.PI;
 
 export function updateMap(state, input, dt) {
-  const thrust = 120;
-  const drag = 0.93;
-  const storm = 0.4 + Math.sin(state.elapsed * 0.2) * 0.35;
+  const turnRate = 2.4;
+  const thrustAccel = 95;
+  const reverseAccel = 55;
+  const drag = 0.96;
+  const maxFwd = 180;
+  const maxRev = -75;
+  const storm = 0.45 + Math.sin(state.elapsed * 0.24) * 0.35;
 
-  if (input.down('KeyW') || input.down('ArrowUp')) state.boat.vy -= thrust * dt;
-  if (input.down('KeyS') || input.down('ArrowDown')) state.boat.vy += thrust * dt;
-  if (input.down('KeyA') || input.down('ArrowLeft')) state.boat.vx -= thrust * dt;
-  if (input.down('KeyD') || input.down('ArrowRight')) state.boat.vx += thrust * dt;
+  const turnLeft = input.down('KeyA') || input.down('ArrowLeft');
+  const turnRight = input.down('KeyD') || input.down('ArrowRight');
+  const forward = input.down('KeyW') || input.down('ArrowUp');
+  const backward = input.down('KeyS') || input.down('ArrowDown');
 
-  state.boat.vx += Math.sin(state.elapsed * 0.55) * storm * dt * 5;
-  state.boat.vy += Math.cos(state.elapsed * 0.45) * storm * dt * 4;
+  if (turnLeft) state.boat.heading -= turnRate * dt;
+  if (turnRight) state.boat.heading += turnRate * dt;
 
-  state.boat.vx *= drag;
-  state.boat.vy *= drag;
-  state.boat.x = clamp(state.boat.x + state.boat.vx, 20, MAP_W - 20);
-  state.boat.y = clamp(state.boat.y + state.boat.vy, 20, MAP_H - 20);
+  if (forward) state.boat.speed += thrustAccel * dt;
+  if (backward) state.boat.speed -= reverseAccel * dt;
 
-  const speed = Math.hypot(state.boat.vx, state.boat.vy);
-  if (speed > 0.03) {
-    state.boat.heading = Math.atan2(state.boat.vy, state.boat.vx);
-  }
+  state.boat.speed *= drag;
+  state.boat.speed = clamp(state.boat.speed, maxRev, maxFwd);
 
-  if (speed > 0.05) {
-    state.boat.fuel = Math.max(0, state.boat.fuel - dt * 0.6 * (1 + storm * 0.25));
+  const driftX = Math.sin(state.elapsed * 0.6) * storm * 8;
+  const driftY = Math.cos(state.elapsed * 0.5) * storm * 6;
+
+  state.boat.vx = Math.cos(state.boat.heading) * state.boat.speed + driftX;
+  state.boat.vy = Math.sin(state.boat.heading) * state.boat.speed + driftY;
+
+  state.boat.x = clamp(state.boat.x + state.boat.vx * dt, 20, MAP_W - 20);
+  state.boat.y = clamp(state.boat.y + state.boat.vy * dt, 20, MAP_H - 20);
+
+  const speed = Math.abs(state.boat.speed);
+  if (speed > 1) {
+    state.boat.fuel = Math.max(0, state.boat.fuel - dt * 0.42 * (1 + storm * 0.3) * (1 + speed / 180));
   }
 
   if (input.tap('Space')) {
-    revealNearby(state, 260);
-    state.sonarFlash = 0.45;
+    revealNearby(state, 280);
+    state.sonarFlash = 0.48;
   }
   state.sonarFlash = Math.max(0, (state.sonarFlash || 0) - dt);
 
-  const nearby = getNearbyAOI(state, 65);
-  state.mapHint = nearby ? `Press E to start mission at ${nearby.type}` : 'Find AOI with sonar pulse [SPACE]';
+  const nearby = getNearbyAOI(state, 68);
+  state.mapHint = nearby ? `Press E to deploy at ${nearby.type} (${nearby.depth}m)` : 'Scan with SPACE and line up your boat on an AOI';
 
   if (nearby && input.tap('KeyE')) {
     const contract = state.selectedContract?.aoiId === nearby.id
@@ -111,16 +122,36 @@ function buildObjectiveNodes(type) {
 function drawRotatedBoat(ctx, image, x, y, heading) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(heading || 0);
+  ctx.rotate((heading || 0) + BOAT_SPRITE_FORWARD_OFFSET);
   ctx.drawImage(image, -28, -14, 56, 28);
   ctx.restore();
 }
 
-export function renderMap(ctx, state, w, h, assets) {
-  ctx.fillStyle = '#0a3045';
+function drawWaterShader(ctx, w, h, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#155879');
+  g.addColorStop(0.5, '#0a3852');
+  g.addColorStop(1, '#08293e');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.strokeStyle = 'rgba(130,220,255,0.10)';
+  ctx.lineWidth = 1.5;
+  for (let y = 20; y < h; y += 38) {
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 26) {
+      const yy = y + Math.sin((x * 0.03) + (t * 1.8) + y * 0.02) * 4;
+      if (x === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+}
+
+export function renderMap(ctx, state, w, h, assets) {
+  drawWaterShader(ctx, w, h, state.elapsed);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
   for (let i = 0; i < w; i += 64) {
     ctx.beginPath();
     ctx.moveTo(i, 0);
@@ -130,6 +161,7 @@ export function renderMap(ctx, state, w, h, assets) {
 
   if (state.sonarFlash > 0) {
     ctx.strokeStyle = `rgba(128,220,255,${state.sonarFlash})`;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(state.boat.x * 0.6, state.boat.y * 0.45, 240 * (0.45 - state.sonarFlash + 0.1), 0, Math.PI * 2);
     ctx.stroke();
@@ -161,6 +193,6 @@ export function renderMap(ctx, state, w, h, assets) {
 
   ctx.fillStyle = '#d2efff';
   ctx.font = '16px sans-serif';
-  ctx.fillText('Map Mode - WASD move | SPACE sonar | E engage AOI | P port', 20, 28);
+  ctx.fillText('Map - W/S throttle, A/D steer | SPACE sonar | E deploy | P port', 20, 28);
   ctx.fillText(state.mapHint || '', 20, 50);
 }

@@ -80,19 +80,31 @@ function render() {
   }
 }
 
+function meterRow(label, value) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  return `<div class="stat-row"><span>${label}</span><div class="meter"><div class="fill" style="width:${v}%"></div></div><span>${v}%</span></div>`;
+}
+
 function updateHud() {
   const contracts = state.contracts
     .map((c, idx) => `<li>${idx + 1}. ${contractSummary(c)} ${state.selectedContract?.id === c.id ? '• active' : ''}</li>`)
     .join('');
 
   const upgrades = state.upgradesOwned.map((u) => getUpgradeLabel(u)).join(', ') || 'none';
+  const activeContract = state.selectedContract ? contractSummary(state.selectedContract) : 'None selected';
 
   hud.innerHTML = `
     <section class="card">
       <h3>Deep Sea Mission</h3>
       <p class="small">Mode: <span class="key">${state.mode}</span></p>
       <p class="small">${formatBoatState(state.boat)}</p>
+      ${meterRow('Fuel', state.boat.fuel)}
+      ${meterRow('Hull', state.boat.hull)}
       <p class="small">Credits: $${state.money}</p>
+    </section>
+    <section class="card">
+      <h3>Active Contract</h3>
+      <p class="small">${activeContract}</p>
     </section>
     <section class="card">
       <h3>Contracts</h3>
@@ -106,9 +118,9 @@ function updateHud() {
     </section>
     <section class="card">
       <h3>Controls</h3>
-      <p class="small">Move: WASD / Arrows</p>
+      <p class="small">Map boat: W/S throttle, A/D steer</p>
       <p class="small">Map sonar: SPACE</p>
-      <p class="small">Map engage / extract: E</p>
+      <p class="small">Deploy/Extract: E</p>
       <p class="small">Encounter interact: hold F</p>
       <p class="small">Return to port from map: P</p>
     </section>
