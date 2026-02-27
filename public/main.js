@@ -92,6 +92,7 @@ function updateHud() {
 
   const upgrades = state.upgradesOwned.map((u) => getUpgradeLabel(u)).join(', ') || 'none';
   const activeContract = state.selectedContract ? contractSummary(state.selectedContract) : 'None selected';
+  const currentPort = state.world.ports.find((p) => p.id === state.currentPortId);
 
   hud.innerHTML = `
     <section class="card">
@@ -101,6 +102,7 @@ function updateHud() {
       ${meterRow('Fuel', state.boat.fuel)}
       ${meterRow('Hull', state.boat.hull)}
       <p class="small">Credits: $${state.money}</p>
+      <p class="small">Docked Port: ${currentPort?.name || 'At Sea'}</p>
     </section>
     <section class="card">
       <h3>Active Contract</h3>
@@ -120,9 +122,9 @@ function updateHud() {
       <h3>Controls</h3>
       <p class="small">Map boat: W/S throttle, A/D steer</p>
       <p class="small">Map sonar: SPACE</p>
-      <p class="small">Deploy/Extract: E</p>
+      <p class="small">Deploy/Dock/Extract: E</p>
       <p class="small">Encounter interact: hold F</p>
-      <p class="small">Return to port from map: P</p>
+      <p class="small">Dock by sailing near port and pressing E</p>
     </section>
   `;
 }

@@ -47,7 +47,8 @@ export function renderPort(ctx, state, w, h, assets) {
 
   ctx.fillStyle = '#88d7ff';
   ctx.font = '28px sans-serif';
-  ctx.fillText('Port - Quiet Harbor', 40, 60);
+  const currentPort = state.world.ports.find((p) => p.id === state.currentPortId);
+  ctx.fillText(`Port - ${currentPort?.name || 'Harbor'}`, 40, 60);
 
   if (assets.boat) {
     ctx.drawImage(assets.boat, 820, 40, 180, 90);
@@ -55,7 +56,7 @@ export function renderPort(ctx, state, w, h, assets) {
 
   ctx.font = '18px sans-serif';
   ctx.fillStyle = '#d6f0ff';
-  ctx.fillText('Choose contract [1-5], then Enter to depart', 40, 100);
+  ctx.fillText('Choose contract [1-5], then Enter to depart from this port', 40, 100);
   ctx.fillText('Buy upgrades: [7] Tank [8] Lamp [9] Cutter', 40, 128);
 
   ctx.fillStyle = '#264e63';

@@ -21,7 +21,6 @@ export function updateMap(state, input, dt) {
 
   if (turnLeft) state.boat.heading -= turnRate * dt;
   if (turnRight) state.boat.heading += turnRate * dt;
-
   if (forward) state.boat.speed += thrustAccel * dt;
   if (backward) state.boat.speed -= reverseAccel * dt;
 
@@ -48,33 +47,48 @@ export function updateMap(state, input, dt) {
   }
   state.sonarFlash = Math.max(0, (state.sonarFlash || 0) - dt);
 
-  const nearby = getNearbyAOI(state, 68);
-  state.mapHint = nearby ? `Press E to deploy at ${nearby.type} (${nearby.depth}m)` : 'Scan with SPACE and line up your boat on an AOI';
+  const nearbyPort = getNearbyPort(state, 80);
+  const nearbyAoi = getNearbyAOI(state, 68);
 
-  if (nearby && input.tap('KeyE')) {
-    const contract = state.selectedContract?.aoiId === nearby.id
-      ? state.selectedContract
-      : state.contracts.find((c) => c.aoiId === nearby.id) || state.contracts[0];
-    state.selectedContract = contract;
-    state.encounter = createEncounterState(nearby, contract, state);
-    state.mode = Modes.ENCOUNTER;
+  if (nearbyPort) {
+    state.mapHint = `Press E to dock at ${nearbyPort.name}`;
+    if (input.tap('KeyE')) {
+      state.currentPortId = nearbyPort.id;
+      state.mode = Modes.PORT;
+      return;
+    }
+  } else if (nearbyAoi) {
+    state.mapHint = `Press E to deploy at ${nearbyAoi.type} (${nearbyAoi.depth}m)`;
+    if (input.tap('KeyE')) {
+      const contract = state.selectedContract?.aoiId === nearbyAoi.id
+        ? state.selectedContract
+        : state.contracts.find((c) => c.aoiId === nearbyAoi.id) || state.contracts[0];
+      state.selectedContract = contract;
+      state.encounter = createEncounterState(nearbyAoi, contract, state);
+      state.mode = Modes.ENCOUNTER;
+      return;
+    }
+  } else {
+    state.mapHint = 'Scan with SPACE, deploy at AOIs, dock at ports to cash out';
   }
 
   if (input.tap('KeyP')) {
-    state.mode = Modes.PORT;
+    state.mapHint = 'Need to be near a port to dock (use E).';
   }
 }
 
 function revealNearby(state, radius) {
   state.world.aois.forEach((aoi) => {
-    if (dist(state.boat, aoi) < radius) {
-      state.discoveredAOIs.add(aoi.id);
-    }
+    if (dist(state.boat, aoi) < radius) state.discoveredAOIs.add(aoi.id);
   });
 }
 
 function getNearbyAOI(state, radius) {
   return state.world.aois.find((aoi) => dist(state.boat, aoi) < radius);
+}
+
+function getNearbyPort(state, radius) {
+  return state.world.ports.find((port) => dist(state.boat, port) < radius);
 }
 
 function createEncounterState(aoi, contract, state) {
@@ -98,6 +112,8 @@ function createEncounterState(aoi, contract, state) {
     done: false,
     failed: false,
     timer: 0,
+    valveSequence: ['KeyQ', 'KeyE', 'KeyQ'],
+    valveStep: 0,
     currentFactor: contract.params.current,
     siltiness: contract.params.siltiness,
     depthPressure: contract.params.depthPressure,
@@ -106,16 +122,14 @@ function createEncounterState(aoi, contract, state) {
 }
 
 function buildObjectiveNodes(type) {
-  if (type === 'place_beacons') {
+  if (type === 'place_beacons' || type === 'scan_sweep') {
     return [
       { x: 660, y: 290, done: false },
       { x: 760, y: 410, done: false },
       { x: 860, y: 500, done: false }
     ];
   }
-  if (type === 'rescue') {
-    return [{ x: 820, y: 470, done: false }];
-  }
+  if (type === 'rescue') return [{ x: 820, y: 470, done: false }];
   return [{ x: 770, y: 430, done: false }];
 }
 
@@ -134,7 +148,6 @@ function drawWaterShader(ctx, w, h, t) {
   g.addColorStop(1, '#08293e');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-
   ctx.strokeStyle = 'rgba(130,220,255,0.10)';
   ctx.lineWidth = 1.5;
   for (let y = 20; y < h; y += 38) {
@@ -151,13 +164,15 @@ function drawWaterShader(ctx, w, h, t) {
 export function renderMap(ctx, state, w, h, assets) {
   drawWaterShader(ctx, w, h, state.elapsed);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  for (let i = 0; i < w; i += 64) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, h);
-    ctx.stroke();
-  }
+  state.world.ports.forEach((port) => {
+    const x = port.x * 0.6;
+    const y = port.y * 0.45;
+    ctx.fillStyle = '#ffd7a3';
+    ctx.fillRect(x - 14, y - 14, 28, 28);
+    ctx.fillStyle = '#243645';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(port.name, x - 30, y - 18);
+  });
 
   if (state.sonarFlash > 0) {
     ctx.strokeStyle = `rgba(128,220,255,${state.sonarFlash})`;
@@ -182,17 +197,10 @@ export function renderMap(ctx, state, w, h, assets) {
 
   const bx = state.boat.x * 0.6;
   const by = state.boat.y * 0.45;
-  if (assets.boat) {
-    drawRotatedBoat(ctx, assets.boat, bx, by, state.boat.heading || 0);
-  } else {
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(bx, by, 9, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  if (assets.boat) drawRotatedBoat(ctx, assets.boat, bx, by, state.boat.heading || 0);
 
   ctx.fillStyle = '#d2efff';
   ctx.font = '16px sans-serif';
-  ctx.fillText('Map - W/S throttle, A/D steer | SPACE sonar | E deploy | P port', 20, 28);
+  ctx.fillText('Map - W/S throttle, A/D steer | SPACE sonar | E deploy/dock', 20, 28);
   ctx.fillText(state.mapHint || '', 20, 50);
 }

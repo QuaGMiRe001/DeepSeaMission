@@ -40,6 +40,17 @@ function buildObjectives(type) {
         { id: 'find', label: 'Find trapped diver', done: false },
         { id: 'escort', label: 'Escort diver to extraction point', done: false }
       ];
+    case 'scan_sweep':
+      return [
+        { id: 'scan1', label: 'Complete sonar scan point 1', done: false },
+        { id: 'scan2', label: 'Complete sonar scan point 2', done: false },
+        { id: 'scan3', label: 'Complete sonar scan point 3', done: false }
+      ];
+    case 'stabilize':
+      return [
+        { id: 'prime', label: 'Prime stabilizer node', done: false },
+        { id: 'cycle', label: 'Run valve key cycle', done: false }
+      ];
     default:
       return [{ id: 'complete', label: 'Complete objective', done: false }];
   }
@@ -49,7 +60,8 @@ function encounterParamsByAoi(aoi, modifier) {
   const base = {
     reef: { visibility: 1, current: 1, depthPressure: 1 },
     kelp: { visibility: 0.86, current: 1.15, depthPressure: 1.1 },
-    wreck: { visibility: 0.72, current: 1.25, depthPressure: 1.2 }
+    wreck: { visibility: 0.72, current: 1.25, depthPressure: 1.2 },
+    trench: { visibility: 0.62, current: 1.35, depthPressure: 1.4 }
   }[aoi.type] || { visibility: 0.9, current: 1, depthPressure: 1 };
 
   return {

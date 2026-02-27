@@ -76,57 +76,81 @@ function updateObjectiveProgress(encounter, input, dt) {
     return;
   }
 
-  encounter.actionHint = `Objective: ${currentObjective.label}`;
-
   const activeNode = encounter.objectiveNodes.find((node) => !node.done) || encounter.objectiveNodes[encounter.objectiveNodes.length - 1];
   const nearNode = nearPoint(diver, activeNode, 45);
 
   switch (encounter.contract.type) {
     case 'place_beacons':
+      encounter.actionHint = `Place beacon (${Math.round(encounter.objectiveProgress * 100)}%)`;
       if (nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 1.0, 0, 1);
-      if (encounter.objectiveProgress >= 1) {
-        activeNode.done = true;
-        encounter.objectiveProgress = 0;
-        objectives[encounter.objectiveIndex].done = true;
-        encounter.objectiveIndex += 1;
-      }
+      if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
       break;
+
+    case 'scan_sweep':
+      encounter.actionHint = `Hold F to scan site (${Math.round(encounter.objectiveProgress * 100)}%)`;
+      if (nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 1.25, 0, 1);
+      if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
+      break;
+
     case 'fetch':
+      encounter.actionHint = diver.carrying ? 'Return cargo to boat (E or F)' : 'Pick up cargo (tap F)';
       if (!diver.carrying && nearNode && input.tap('KeyF')) {
         diver.carrying = true;
-        activeNode.done = true;
-        objectives[encounter.objectiveIndex].done = true;
-        encounter.objectiveIndex += 1;
+        completeStep(encounter, activeNode, objectives);
       } else if (diver.carrying && nearBoat && (input.tap('KeyF') || input.tap('KeyE'))) {
         diver.carrying = false;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
       }
       break;
+
+    case 'stabilize':
+      if (!nearNode) {
+        encounter.actionHint = 'Move to stabilizer node';
+        return;
+      }
+      const wanted = encounter.valveSequence[encounter.valveStep];
+      encounter.actionHint = `Valve cycle: press ${wanted.replace('Key', '')} (${encounter.valveStep + 1}/${encounter.valveSequence.length})`;
+      if (input.tap('KeyQ') || input.tap('KeyE')) {
+        const pressed = input.tap('KeyQ') ? 'KeyQ' : 'KeyE';
+        if (pressed === wanted) {
+          encounter.valveStep += 1;
+          if (encounter.valveStep >= encounter.valveSequence.length) {
+            encounter.valveStep = 0;
+            completeStep(encounter, activeNode, objectives);
+          }
+        } else {
+          encounter.valveStep = 0;
+        }
+      }
+      break;
+
     case 'rescue':
+      encounter.actionHint = diver.escorting ? 'Escort diver to boat (E or F)' : 'Free trapped diver (hold F)';
       if (!diver.escorting && nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.6, 0, 1);
       if (!diver.escorting && encounter.objectiveProgress >= 1) {
         diver.escorting = true;
-        activeNode.done = true;
-        encounter.objectiveProgress = 0;
-        objectives[encounter.objectiveIndex].done = true;
-        encounter.objectiveIndex += 1;
+        completeStep(encounter, activeNode, objectives);
       } else if (diver.escorting && nearBoat && (input.tap('KeyF') || input.tap('KeyE'))) {
         diver.escorting = false;
         objectives[encounter.objectiveIndex].done = true;
         encounter.objectiveIndex += 1;
       }
       break;
+
     default:
+      encounter.actionHint = `Work objective (${Math.round(encounter.objectiveProgress * 100)}%)`;
       if (nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.52, 0, 1);
-      if (encounter.objectiveProgress >= 1) {
-        activeNode.done = true;
-        objectives[encounter.objectiveIndex].done = true;
-        encounter.objectiveProgress = 0;
-        encounter.objectiveIndex += 1;
-      }
+      if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
       break;
   }
+}
+
+function completeStep(encounter, node, objectives) {
+  node.done = true;
+  encounter.objectiveProgress = 0;
+  objectives[encounter.objectiveIndex].done = true;
+  encounter.objectiveIndex += 1;
 }
 
 function nearPoint(a, b, radius) {
@@ -166,9 +190,7 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillRect(0, 0, w, WATERLINE_Y);
 
   const bob = Math.sin(state.elapsed * 2.2) * 3;
-  if (assets.boat) {
-    ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
-  }
+  if (assets.boat) ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
 
   ctx.strokeStyle = '#e7f8ff';
   ctx.lineWidth = 2;
@@ -203,7 +225,6 @@ export function renderEncounter(ctx, state, w, h, assets) {
       ctx.fillRect(node.x - 8, node.y - 8, 16, 16);
       return;
     }
-
     if (icon) ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
     else {
       ctx.fillStyle = '#7fb7cf';
@@ -216,7 +237,7 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | F interact | E dock/extract at boat', 20, 28);
+  ctx.fillText('Encounter - WASD swim | F interact | E dock/extract | Q/E valve cycle missions', 20, 28);
   ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 
@@ -227,6 +248,6 @@ function renderObjectiveList(ctx, objectives, index) {
   ctx.font = '14px sans-serif';
   objectives.forEach((objective, i) => {
     ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
-    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 680, 28 + i * 20);
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 650, 28 + i * 20);
   });
 }

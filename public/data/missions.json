@@ -4,7 +4,9 @@
     { "id": "retrieve", "title": "Retrieve Item", "type": "fetch", "basePay": 150 },
     { "id": "cut_net", "title": "Clear Entanglement", "type": "cut", "basePay": 170 },
     { "id": "repair", "title": "Cable Repair", "type": "repair", "basePay": 220 },
-    { "id": "rescue", "title": "Diver Rescue", "type": "rescue", "basePay": 260 }
+    { "id": "rescue", "title": "Diver Rescue", "type": "rescue", "basePay": 260 },
+    { "id": "scan", "title": "Sonar Sweep", "type": "scan_sweep", "basePay": 210 },
+    { "id": "stabilize", "title": "Pressure Stabilization", "type": "stabilize", "basePay": 240 }
   ],
   "modifiers": [
     { "id": "night", "label": "Night Dive", "payMult": 1.25, "visibility": 0.75 },
