@@ -16,6 +16,18 @@ function insideZone(point, zone) {
   return Math.hypot(point.x - zone.x, point.y - zone.y) <= zone.r;
 }
 
+function normalizeAngle(angle) {
+  let a = angle;
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function approachAngle(current, target, step) {
+  const delta = normalizeAngle(target - current);
+  return current + delta * step;
+}
+
 export function updateEncounter(state, input, dt) {
   const encounter = state.encounter;
   const diver = encounter.diver;
@@ -27,21 +39,35 @@ export function updateEncounter(state, input, dt) {
 
   maybeToggleCave(encounter, diver, input);
 
-  const moveAccel = 250;
-  const waterFriction = 0.26;
-  const maxSpeed = 180;
-  const currentX = Math.sin(state.elapsed * 0.9 + encounter.timer * 0.2) * encounter.currentFactor * 3.8;
+  const moveAccel = 215;
+  const verticalAccel = 182;
+  const waterFriction = 0.34;
+  const idleDrag = 0.9;
+  const burst = input.down('ShiftLeft') || input.down('ShiftRight') ? 1.28 : 1;
+  const maxSpeed = 165 * burst;
+  const currentX = Math.sin(state.elapsed * 0.9 + encounter.timer * 0.2) * encounter.currentFactor * 3.2;
 
   const axisX = (input.down('KeyD') || input.down('ArrowRight') ? 1 : 0) - (input.down('KeyA') || input.down('ArrowLeft') ? 1 : 0);
   const axisY = (input.down('KeyS') || input.down('ArrowDown') ? 1 : 0) - (input.down('KeyW') || input.down('ArrowUp') ? 1 : 0);
 
-  const targetVX = axisX * moveAccel;
-  const targetVY = axisY * moveAccel;
+  const targetVX = axisX * moveAccel * burst;
+  const targetVY = axisY * verticalAccel * burst;
 
   diver.vx = approach(diver.vx, targetVX, waterFriction) + currentX;
   diver.vy = approach(diver.vy, targetVY, waterFriction);
+
+  if (axisX === 0) diver.vx *= idleDrag;
+  if (axisY === 0) diver.vy *= idleDrag;
+  if (axisX === 0 && axisY === 0) diver.vy -= 8 * dt;
+
   diver.vx = clamp(diver.vx, -maxSpeed, maxSpeed);
   diver.vy = clamp(diver.vy, -maxSpeed, maxSpeed);
+
+  const swimSpeed = Math.hypot(diver.vx, diver.vy);
+  if (swimSpeed > 8) {
+    diver.heading = approachAngle(diver.heading || 0, Math.atan2(diver.vy, diver.vx), 0.24);
+  }
+  diver.kickPhase = (diver.kickPhase || 0) + dt * (2.6 + swimSpeed * 0.04);
 
   diver.x = clamp(diver.x + diver.vx * dt, 40, 980);
   diver.y = clamp(diver.y + diver.vy * dt, WATERLINE_Y, 540);
@@ -279,7 +305,7 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
     if (icon) ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
   });
 
-  if (assets.diver) ctx.drawImage(assets.diver, diver.x - 14, diver.y - 14, 28, 28);
+  drawSwimmingDiver(ctx, diver);
 
   const gradient = ctx.createRadialGradient(diver.x, diver.y, 10, diver.x, diver.y, diver.lampRange);
   gradient.addColorStop(0, 'rgba(170, 225, 255, 0.28)');
@@ -287,6 +313,74 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
 }
+
+
+function drawSwimmingDiver(ctx, diver) {
+  const heading = diver.heading || 0;
+  const kick = Math.sin(diver.kickPhase || 0);
+
+  ctx.save();
+  ctx.translate(diver.x, diver.y);
+  ctx.rotate(heading);
+
+  ctx.fillStyle = '#2e3944';
+  ctx.fillRect(-16, -6, 22, 12);
+
+  ctx.fillStyle = '#10171d';
+  ctx.beginPath();
+  ctx.ellipse(-2, 0, 11, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#ffb88a';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(2, -4);
+  ctx.lineTo(10, -6 - kick * 2);
+  ctx.moveTo(2, 4);
+  ctx.lineTo(10, 6 + kick * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#0f151b';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-8, -4);
+  ctx.lineTo(-16, -8 - kick * 4);
+  ctx.moveTo(-8, 4);
+  ctx.lineTo(-16, 8 + kick * 4);
+  ctx.stroke();
+
+  ctx.fillStyle = '#29c9e7';
+  ctx.beginPath();
+  ctx.arc(-17, -9 - kick * 4, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-17, 9 + kick * 4, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#1f2932';
+  ctx.beginPath();
+  ctx.arc(11, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#7ddff5';
+  ctx.fillRect(9, -2, 8, 4);
+
+  if (diver.carrying) {
+    ctx.fillStyle = '#d8a770';
+    ctx.fillRect(15, -4, 8, 8);
+  }
+
+  if (diver.escorting) {
+    ctx.fillStyle = '#9ee0ff';
+    ctx.beginPath();
+    ctx.arc(-26, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 
 export function renderEncounter(ctx, state, w, h, assets) {
   const encounter = state.encounter;
@@ -328,7 +422,7 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | F interact | E extract/enter cave | +/- zoom', 20, 28);
+  ctx.fillText('Encounter - WASD swim | Shift burst | F interact | E extract/enter cave | +/- zoom', 20, 28);
   ctx.fillText(`Test Mode: no mission timer/fail pressure active | Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 

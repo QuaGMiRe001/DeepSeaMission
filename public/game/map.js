@@ -114,7 +114,9 @@ function createEncounterState(aoi, contract, state) {
       maxDepth: Math.round(aoi.depth * 1.25),
       lampRange: Math.round((state.upgradesOwned.includes('lamp_1') ? 200 : 150) * contract.params.visibility),
       carrying: false,
-      escorting: false
+      escorting: false,
+      heading: 0,
+      kickPhase: 0
     },
     objectiveProgress: 0,
     objectiveIndex: 0,
