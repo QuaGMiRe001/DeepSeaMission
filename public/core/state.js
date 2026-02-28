@@ -7,6 +7,8 @@ export const Modes = {
 
 export function createGameState(bootstrap) {
   const startPort = bootstrap.world.ports.find((p) => p.id === bootstrap.world.startPort) || bootstrap.world.ports[0];
+  const currentGear = bootstrap.save.currentGear || 'diver';
+
   return {
     mode: Modes.PORT,
     dt: 0,
@@ -14,6 +16,7 @@ export function createGameState(bootstrap) {
     money: bootstrap.save.money,
     upgradesOwned: bootstrap.save.upgradesOwned,
     currentPortId: startPort?.id || null,
+    currentGear,
     boat: {
       x: bootstrap.save.boat.mapX ?? startPort.x,
       y: bootstrap.save.boat.mapY ?? startPort.y,

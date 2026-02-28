@@ -22,7 +22,7 @@ function buildObjectives(type) {
     case 'repair':
       return [
         { id: 'locate', label: 'Locate cable break', done: false },
-        { id: 'fix', label: 'Stabilize and repair cable', done: false }
+        { id: 'fix', label: 'Complete repair timing sequence', done: false }
       ];
     case 'place_beacons':
       return [
@@ -50,6 +50,12 @@ function buildObjectives(type) {
       return [
         { id: 'prime', label: 'Prime stabilizer node', done: false },
         { id: 'cycle', label: 'Run valve key cycle', done: false }
+      ];
+    case 'wreck_explore':
+      return [
+        { id: 'entry', label: 'Enter wreck interior', done: false },
+        { id: 'relic1', label: 'Recover relic cache A', done: false },
+        { id: 'relic2', label: 'Recover relic cache B', done: false }
       ];
     default:
       return [{ id: 'complete', label: 'Complete objective', done: false }];
@@ -83,6 +89,7 @@ function generateContract({ aoi, templates, modifiers, seed, sequence }) {
     aoiId: aoi.id,
     aoiType: aoi.type,
     risk: aoi.risk,
+    depth: aoi.depth,
     title: template.title,
     type: template.type,
     modifier: maybeModifier,

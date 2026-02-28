@@ -6,6 +6,7 @@ const SAVE_PATH = path.join(__dirname, 'savegame.json');
 const defaultSave = {
   money: 250,
   upgradesOwned: [],
+  currentGear: 'diver',
   boat: {
     fuel: 100,
     hull: 100,

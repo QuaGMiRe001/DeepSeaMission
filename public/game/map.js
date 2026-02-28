@@ -37,9 +37,7 @@ export function updateMap(state, input, dt) {
   state.boat.y = clamp(state.boat.y + state.boat.vy * dt, 20, MAP_H - 20);
 
   const speed = Math.abs(state.boat.speed);
-  if (speed > 1) {
-    state.boat.fuel = Math.max(0, state.boat.fuel - dt * 0.42 * (1 + storm * 0.3) * (1 + speed / 180));
-  }
+  if (speed > 1) state.boat.fuel = Math.max(0, state.boat.fuel - dt * 0.42 * (1 + storm * 0.3) * (1 + speed / 180));
 
   if (input.tap('Space')) {
     revealNearby(state, 280);
@@ -58,8 +56,13 @@ export function updateMap(state, input, dt) {
       return;
     }
   } else if (nearbyAoi) {
-    state.mapHint = `Press E to deploy at ${nearbyAoi.type} (${nearbyAoi.depth}m)`;
+    const requiredGear = nearbyAoi.depth > 70 ? 'divebell' : 'diver';
+    state.mapHint = `AOI ${nearbyAoi.type} ${nearbyAoi.depth}m | requires ${requiredGear.toUpperCase()} | E deploy`;
     if (input.tap('KeyE')) {
+      if (requiredGear === 'divebell' && state.currentGear !== 'divebell') {
+        state.mapHint = 'This depth requires Dive Bell. Dock and switch loadout in port.';
+        return;
+      }
       const contract = state.selectedContract?.aoiId === nearbyAoi.id
         ? state.selectedContract
         : state.contracts.find((c) => c.aoiId === nearbyAoi.id) || state.contracts[0];
@@ -69,11 +72,7 @@ export function updateMap(state, input, dt) {
       return;
     }
   } else {
-    state.mapHint = 'Scan with SPACE, deploy at AOIs, dock at ports to cash out';
-  }
-
-  if (input.tap('KeyP')) {
-    state.mapHint = 'Need to be near a port to dock (use E).';
+    state.mapHint = 'Scan with SPACE, deploy at AOIs, dock at ports to regear/cash out';
   }
 }
 
@@ -92,9 +91,19 @@ function getNearbyPort(state, radius) {
 }
 
 function createEncounterState(aoi, contract, state) {
+  const deepMission = aoi.depth > 70;
+  const caveZones = (aoi.type === 'wreck' || aoi.type === 'trench')
+    ? [{ x: 740, y: 430, r: 90 }, { x: 880, y: 500, r: 70 }]
+    : [];
+
   return {
     aoi,
     contract,
+    deepMission,
+    hasDiveBell: state.currentGear === 'divebell',
+    diveBell: { x: 360, y: 220 },
+    cameraZoom: 1,
+    targetZoom: 1,
     diver: {
       x: 200,
       y: 90,
@@ -102,7 +111,7 @@ function createEncounterState(aoi, contract, state) {
       vy: 0,
       o2: Math.round(100 * (state.upgradesOwned.includes('tank_1') ? 1.25 : 1)),
       maxDepth: Math.round(aoi.depth * 1.25),
-      lampRange: Math.round((state.upgradesOwned.includes('lamp_1') ? 185 : 140) * contract.params.visibility),
+      lampRange: Math.round((state.upgradesOwned.includes('lamp_1') ? 200 : 150) * contract.params.visibility),
       carrying: false,
       escorting: false
     },
@@ -114,9 +123,12 @@ function createEncounterState(aoi, contract, state) {
     timer: 0,
     valveSequence: ['KeyQ', 'KeyE', 'KeyQ'],
     valveStep: 0,
+    repairWindow: 0,
+    repairHits: 0,
     currentFactor: contract.params.current,
     siltiness: contract.params.siltiness,
     depthPressure: contract.params.depthPressure,
+    caveZones,
     objectiveNodes: buildObjectiveNodes(contract.type)
   };
 }
@@ -127,6 +139,12 @@ function buildObjectiveNodes(type) {
       { x: 660, y: 290, done: false },
       { x: 760, y: 410, done: false },
       { x: 860, y: 500, done: false }
+    ];
+  }
+  if (type === 'wreck_explore') {
+    return [
+      { x: 740, y: 430, done: false },
+      { x: 890, y: 505, done: false }
     ];
   }
   if (type === 'rescue') return [{ x: 820, y: 470, done: false }];

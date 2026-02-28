@@ -8,14 +8,26 @@ function approach(current, target, factor) {
   return current + (target - current) * factor;
 }
 
+function nearPoint(a, b, radius) {
+  return Math.hypot(a.x - b.x, a.y - b.y) < radius;
+}
+
+function insideZone(point, zone) {
+  return Math.hypot(point.x - zone.x, point.y - zone.y) <= zone.r;
+}
+
 export function updateEncounter(state, input, dt) {
   const encounter = state.encounter;
   const diver = encounter.diver;
   encounter.timer += dt;
 
-  const moveAccel = 230;
-  const waterFriction = 0.24;
-  const maxSpeed = 170;
+  if (input.tap('Equal')) encounter.targetZoom = clamp(encounter.targetZoom + 0.12, 0.85, 1.5);
+  if (input.tap('Minus')) encounter.targetZoom = clamp(encounter.targetZoom - 0.12, 0.85, 1.5);
+  encounter.cameraZoom = approach(encounter.cameraZoom, encounter.targetZoom, 0.2);
+
+  const moveAccel = 250;
+  const waterFriction = 0.26;
+  const maxSpeed = 180;
   const currentX = Math.sin(state.elapsed * 0.9 + encounter.timer * 0.2) * encounter.currentFactor * 3.8;
 
   const axisX = (input.down('KeyD') || input.down('ArrowRight') ? 1 : 0) - (input.down('KeyA') || input.down('ArrowLeft') ? 1 : 0);
@@ -26,13 +38,16 @@ export function updateEncounter(state, input, dt) {
 
   diver.vx = approach(diver.vx, targetVX, waterFriction) + currentX;
   diver.vy = approach(diver.vy, targetVY, waterFriction);
-
   diver.vx = clamp(diver.vx, -maxSpeed, maxSpeed);
   diver.vy = clamp(diver.vy, -maxSpeed, maxSpeed);
 
   diver.x = clamp(diver.x + diver.vx * dt, 40, 980);
   diver.y = clamp(diver.y + diver.vy * dt, WATERLINE_Y, 540);
-  diver.o2 = Math.max(0, diver.o2 - dt * 2.2);
+
+  const nearBell = encounter.hasDiveBell && nearPoint(diver, encounter.diveBell, 52);
+  const o2Drain = nearBell ? 0.5 : 2.2;
+  diver.o2 = Math.max(0, diver.o2 - dt * o2Drain);
+  if (nearBell) diver.o2 = Math.min(130, diver.o2 + dt * 10);
 
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
   if (depthMeters > diver.maxDepth) {
@@ -54,13 +69,6 @@ export function updateEncounter(state, input, dt) {
     state.money = Math.max(0, state.money - 60);
     state.mode = Modes.RESULTS;
   }
-}
-
-function completeEncounter(state, encounter) {
-  encounter.done = true;
-  state.lastResult = { success: true, pay: encounter.contract.pay, title: encounter.contract.title };
-  state.money += encounter.contract.pay;
-  state.mode = Modes.RESULTS;
 }
 
 function updateObjectiveProgress(encounter, input, dt) {
@@ -104,7 +112,21 @@ function updateObjectiveProgress(encounter, input, dt) {
       }
       break;
 
-    case 'stabilize':
+    case 'repair': {
+      encounter.repairWindow = (Math.sin(encounter.timer * 5) + 1) / 2;
+      encounter.actionHint = `Repair timing: hit F in green zone (success ${encounter.repairHits}/3)`;
+      if (nearNode && input.tap('KeyF')) {
+        if (encounter.repairWindow > 0.38 && encounter.repairWindow < 0.62) encounter.repairHits += 1;
+        else encounter.repairHits = Math.max(0, encounter.repairHits - 1);
+      }
+      if (encounter.repairHits >= 3) {
+        encounter.repairHits = 0;
+        completeStep(encounter, activeNode, objectives);
+      }
+      break;
+    }
+
+    case 'stabilize': {
       if (!nearNode) {
         encounter.actionHint = 'Move to stabilizer node';
         return;
@@ -124,6 +146,15 @@ function updateObjectiveProgress(encounter, input, dt) {
         }
       }
       break;
+    }
+
+    case 'wreck_explore': {
+      const inCave = encounter.caveZones.some((z) => insideZone(diver, z));
+      encounter.actionHint = inCave ? `Search wreck cache (${Math.round(encounter.objectiveProgress * 100)}%)` : 'Enter wreck cavity to search';
+      if (inCave && nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.9, 0, 1);
+      if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
+      break;
+    }
 
     case 'rescue':
       encounter.actionHint = diver.escorting ? 'Escort diver to boat (E or F)' : 'Free trapped diver (hold F)';
@@ -153,12 +184,15 @@ function completeStep(encounter, node, objectives) {
   encounter.objectiveIndex += 1;
 }
 
-function nearPoint(a, b, radius) {
-  return Math.hypot(a.x - b.x, a.y - b.y) < radius;
+function completeEncounter(state, encounter) {
+  encounter.done = true;
+  state.lastResult = { success: true, pay: encounter.contract.pay, title: encounter.contract.title };
+  state.money += encounter.contract.pay;
+  state.mode = Modes.RESULTS;
 }
 
 function objectiveImage(assets, contractType) {
-  if (contractType === 'fetch') return assets.cargo;
+  if (contractType === 'fetch' || contractType === 'wreck_explore') return assets.cargo;
   if (contractType === 'rescue') return assets.rescue;
   return assets.beacon;
 }
@@ -182,15 +216,51 @@ function drawUnderwaterShader(ctx, w, h, t) {
   }
 }
 
+function renderWorld(ctx, encounter, assets, state, w, h) {
+  const diver = encounter.diver;
+
+  const bob = Math.sin(state.elapsed * 2.2) * 3;
+  if (assets.boat) ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
+
+  if (encounter.hasDiveBell) {
+    ctx.fillStyle = '#e3d2a8';
+    ctx.fillRect(encounter.diveBell.x - 18, encounter.diveBell.y - 24, 36, 36);
+    ctx.strokeStyle = '#6d5a38';
+    ctx.strokeRect(encounter.diveBell.x - 18, encounter.diveBell.y - 24, 36, 36);
+  }
+
+  encounter.caveZones.forEach((zone) => {
+    ctx.fillStyle = 'rgba(20,20,20,0.6)';
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  const icon = objectiveImage(assets, encounter.contract.type);
+  encounter.objectiveNodes.forEach((node) => {
+    if (node.done) {
+      ctx.fillStyle = '#6ec48d';
+      ctx.fillRect(node.x - 8, node.y - 8, 16, 16);
+      return;
+    }
+    if (icon) ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
+  });
+
+  if (assets.diver) ctx.drawImage(assets.diver, diver.x - 14, diver.y - 14, 28, 28);
+
+  const gradient = ctx.createRadialGradient(diver.x, diver.y, 10, diver.x, diver.y, diver.lampRange);
+  gradient.addColorStop(0, 'rgba(170, 225, 255, 0.28)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
+}
+
 export function renderEncounter(ctx, state, w, h, assets) {
   const encounter = state.encounter;
   const diver = encounter.diver;
 
   ctx.fillStyle = '#98d3ef';
   ctx.fillRect(0, 0, w, WATERLINE_Y);
-
-  const bob = Math.sin(state.elapsed * 2.2) * 3;
-  if (assets.boat) ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
 
   ctx.strokeStyle = '#e7f8ff';
   ctx.lineWidth = 2;
@@ -204,41 +274,29 @@ export function renderEncounter(ctx, state, w, h, assets) {
 
   drawUnderwaterShader(ctx, w, h, state.elapsed);
 
-  const particles = 40;
-  for (let i = 0; i < particles; i += 1) {
-    const px = (i * 173 + Math.floor(state.elapsed * 30)) % w;
-    const py = WATERLINE_Y + 15 + ((i * 89 + Math.floor(state.elapsed * 18 * encounter.siltiness)) % (h - WATERLINE_Y - 20));
-    ctx.fillStyle = `rgba(190,220,235,${0.07 * encounter.siltiness})`;
-    ctx.fillRect(px, py, 2, 2);
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.scale(encounter.cameraZoom, encounter.cameraZoom);
+  ctx.translate(-diver.x, -diver.y);
+  renderWorld(ctx, encounter, assets, state, w, h);
+  ctx.restore();
+
+  if (encounter.contract.type === 'repair') {
+    const x = 20;
+    const y = h - 30;
+    ctx.fillStyle = '#274657';
+    ctx.fillRect(x, y, 220, 10);
+    ctx.fillStyle = '#5fb06f';
+    ctx.fillRect(x + 84, y, 52, 10);
+    ctx.fillStyle = '#f7e38e';
+    ctx.fillRect(x + encounter.repairWindow * 220 - 3, y - 3, 6, 16);
   }
-
-  const gradient = ctx.createRadialGradient(diver.x, diver.y, 10, diver.x, diver.y, diver.lampRange);
-  gradient.addColorStop(0, 'rgba(170, 225, 255, 0.28)');
-  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
-
-  const icon = objectiveImage(assets, encounter.contract.type);
-  encounter.objectiveNodes.forEach((node) => {
-    if (node.done) {
-      ctx.fillStyle = '#6ec48d';
-      ctx.fillRect(node.x - 8, node.y - 8, 16, 16);
-      return;
-    }
-    if (icon) ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
-    else {
-      ctx.fillStyle = '#7fb7cf';
-      ctx.fillRect(node.x - 10, node.y - 10, 20, 20);
-    }
-  });
-
-  if (assets.diver) ctx.drawImage(assets.diver, diver.x - 14, diver.y - 14, 28, 28);
 
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | F interact | E dock/extract | Q/E valve cycle missions', 20, 28);
-  ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
+  ctx.fillText('Encounter - WASD swim | F interact | E extract | +/- zoom', 20, 28);
+  ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m  Zoom:${encounter.cameraZoom.toFixed(2)}x`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 
   renderObjectiveList(ctx, encounter.contract.objectives, encounter.objectiveIndex);
@@ -248,6 +306,6 @@ function renderObjectiveList(ctx, objectives, index) {
   ctx.font = '14px sans-serif';
   objectives.forEach((objective, i) => {
     ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
-    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 650, 28 + i * 20);
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 600, 28 + i * 20);
   });
 }

@@ -103,6 +103,7 @@ function updateHud() {
       ${meterRow('Hull', state.boat.hull)}
       <p class="small">Credits: $${state.money}</p>
       <p class="small">Docked Port: ${currentPort?.name || 'At Sea'}</p>
+      <p class="small">Gear: ${state.currentGear.toUpperCase()}</p>
     </section>
     <section class="card">
       <h3>Active Contract</h3>
@@ -125,6 +126,7 @@ function updateHud() {
       <p class="small">Deploy/Dock/Extract: E</p>
       <p class="small">Encounter interact: hold F</p>
       <p class="small">Dock by sailing near port and pressing E</p>
+      <p class="small">In port: [6] Diver [0] Dive Bell (if unlocked)</p>
     </section>
   `;
 }
@@ -133,6 +135,7 @@ function getSavePayload() {
   return {
     money: state.money,
     upgradesOwned: state.upgradesOwned,
+    currentGear: state.currentGear,
     boat: {
       fuel: state.boat.fuel,
       hull: state.boat.hull,
