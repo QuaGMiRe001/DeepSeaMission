@@ -62,7 +62,8 @@ export function updateEncounter(state, input, dt) {
 }
 
 function maybeToggleCave(encounter, diver, input) {
-  if (!encounter.caveEntrances.length || !input.tap('KeyE')) return;
+  const interactTap = input.tap('KeyE') || input.tap('KeyF');
+  if (!encounter.caveEntrances.length || !interactTap) return;
 
   if (encounter.currentCaveIndex !== null) {
     const exit = encounter.caveEntrances[encounter.currentCaveIndex];
@@ -72,7 +73,7 @@ function maybeToggleCave(encounter, diver, input) {
     return;
   }
 
-  const entryIndex = encounter.caveEntrances.findIndex((entry) => nearPoint(diver, entry, 36));
+  const entryIndex = encounter.caveEntrances.findIndex((entry) => nearPoint(diver, entry, 52));
   if (entryIndex >= 0) {
     const targetZone = encounter.caveZones[entryIndex];
     diver.x = targetZone.x;
@@ -81,16 +82,23 @@ function maybeToggleCave(encounter, diver, input) {
   }
 }
 
+function getNearbyCaveEntrance(encounter, diver) {
+  if (!encounter.caveEntrances.length || encounter.interior?.active) return null;
+  return encounter.caveEntrances.find((entry) => nearPoint(diver, entry, 56)) || null;
+}
+
 function updateObjectiveProgress(encounter, input, dt) {
   const diver = encounter.diver;
   const objectives = encounter.contract.objectives;
   const currentObjective = objectives[encounter.objectiveIndex];
   const nearBoat = nearPoint(diver, BOAT_POINT, 55);
+  const nearbyEntrance = getNearbyCaveEntrance(encounter, diver);
 
   if (!currentObjective) {
     encounter.actionHint = nearBoat
       ? 'Mission complete. Press E to extract.'
       : 'Return to boat at surface then press E to extract.';
+    if (nearbyEntrance) encounter.actionHint += ' | Cave nearby: press E/F to enter.';
     return;
   }
 
@@ -186,6 +194,10 @@ function updateObjectiveProgress(encounter, input, dt) {
       if (nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.52, 0, 1);
       if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
       break;
+  }
+
+  if (nearbyEntrance && encounter.contract.type !== 'wreck_explore') {
+    encounter.actionHint += ' | Optional cavity nearby: press E/F to enter.';
   }
 }
 
