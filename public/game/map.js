@@ -97,16 +97,19 @@ function createEncounterState(aoi, contract, state) {
     : [];
   const caveEntrances = caveZones.map((z, idx) => ({ x: z.x - z.r + 20 + idx * 8, y: z.y - z.r + 12 }));
 
+  const spawnSurfaceX = clamp(aoi.x * 0.6, 160, 840);
+
   return {
     aoi,
     contract,
     deepMission,
     hasDiveBell: state.currentGear === 'divebell',
-    diveBell: { x: 360, y: 220 },
+    surfaceX: spawnSurfaceX,
+    diveBell: { x: spawnSurfaceX + 140, y: 220 },
     cameraZoom: 1,
     targetZoom: 1,
     diver: {
-      x: 200,
+      x: spawnSurfaceX + 10,
       y: 90,
       vx: 0,
       vy: 0,

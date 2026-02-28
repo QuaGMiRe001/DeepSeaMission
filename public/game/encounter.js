@@ -1,7 +1,6 @@
 import { Modes } from '../core/state.js';
 import { clamp } from '../core/util.js';
 
-const BOAT_POINT = { x: 200, y: 90 };
 const WATERLINE_Y = 80;
 
 function approach(current, target, factor) {
@@ -28,10 +27,23 @@ function approachAngle(current, target, step) {
   return current + delta * step;
 }
 
+function getBoatPoint(encounter, elapsed) {
+  const drift = Math.sin(elapsed * 0.22 + encounter.aoi.x * 0.01) * 80;
+  const swell = Math.sin(elapsed * 1.8 + encounter.aoi.y * 0.02) * 4;
+  return {
+    x: (encounter.surfaceX || 200) + drift,
+    y: WATERLINE_Y - 8 + swell
+  };
+}
+
 export function updateEncounter(state, input, dt) {
   const encounter = state.encounter;
   const diver = encounter.diver;
   encounter.timer += dt;
+
+  encounter.surfaceX = encounter.surfaceX || 200;
+  encounter.surfaceX += Math.sin(state.elapsed * 0.35 + encounter.timer * 0.15) * dt * 9;
+  encounter.surfaceX = clamp(encounter.surfaceX, 130, 870);
 
   if (input.tap('Equal')) encounter.targetZoom = clamp(encounter.targetZoom + 0.12, 0.85, 1.5);
   if (input.tap('Minus')) encounter.targetZoom = clamp(encounter.targetZoom - 0.12, 0.85, 1.5);
@@ -74,13 +86,15 @@ export function updateEncounter(state, input, dt) {
 
   // TEMP: mission timer/fail pressure disabled for playtesting iteration.
   // Keep meter value for UI continuity, but no drain or fail condition.
+  const boatPoint = getBoatPoint(encounter, state.elapsed);
+
   if (encounter.hasDiveBell && nearPoint(diver, encounter.diveBell, 52)) {
     diver.o2 = Math.min(130, diver.o2 + dt * 8);
   }
 
   updateObjectiveProgress(encounter, input, dt);
 
-  const atBoat = nearPoint(diver, BOAT_POINT, 55);
+  const atBoat = nearPoint(diver, boatPoint, 62);
   const objectivesDone = encounter.objectiveIndex >= encounter.contract.objectives.length;
   if (atBoat && objectivesDone && input.tap('KeyE')) {
     completeEncounter(state, encounter);
@@ -117,7 +131,7 @@ function updateObjectiveProgress(encounter, input, dt) {
   const diver = encounter.diver;
   const objectives = encounter.contract.objectives;
   const currentObjective = objectives[encounter.objectiveIndex];
-  const nearBoat = nearPoint(diver, BOAT_POINT, 55);
+  const nearBoat = nearPoint(diver, getBoatPoint(encounter, encounter.timer), 62);
   const nearbyEntrance = getNearbyCaveEntrance(encounter, diver);
 
   if (!currentObjective) {
@@ -268,10 +282,18 @@ function drawUnderwaterShader(ctx, w, h, t) {
 
 function renderWorld(ctx, encounter, assets, state, w, h) {
   const diver = encounter.diver;
-  const bob = Math.sin(state.elapsed * 2.2) * 3;
-  if (assets.boat) ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
+  const boatPoint = getBoatPoint(encounter, state.elapsed);
+  const boatDrawX = boatPoint.x - 60;
+  const boatDrawY = boatPoint.y - 26;
+  if (assets.boat) ctx.drawImage(assets.boat, boatDrawX, boatDrawY, 120, 56);
 
   if (encounter.hasDiveBell) {
+    ctx.strokeStyle = 'rgba(211, 190, 146, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(boatPoint.x, boatPoint.y + 20);
+    ctx.lineTo(encounter.diveBell.x, encounter.diveBell.y - 20);
+    ctx.stroke();
     ctx.fillStyle = '#e3d2a8';
     ctx.fillRect(encounter.diveBell.x - 18, encounter.diveBell.y - 24, 36, 36);
     ctx.strokeStyle = '#6d5a38';
@@ -422,7 +444,7 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | Shift burst | F interact | E extract/enter cave | +/- zoom', 20, 28);
+  ctx.fillText('Encounter - WASD swim | Shift burst | F interact | E extract/enter cave | +/- zoom | boat drifts', 20, 28);
   ctx.fillText(`Test Mode: no mission timer/fail pressure active | Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 
