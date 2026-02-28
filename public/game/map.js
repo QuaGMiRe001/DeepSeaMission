@@ -95,6 +95,7 @@ function createEncounterState(aoi, contract, state) {
   const caveZones = (aoi.type === 'wreck' || aoi.type === 'trench')
     ? [{ x: 740, y: 430, r: 90 }, { x: 880, y: 500, r: 70 }]
     : [];
+  const caveEntrances = caveZones.map((z, idx) => ({ x: z.x - z.r + 20 + idx * 8, y: z.y - z.r + 12 }));
 
   return {
     aoi,
@@ -129,6 +130,8 @@ function createEncounterState(aoi, contract, state) {
     siltiness: contract.params.siltiness,
     depthPressure: contract.params.depthPressure,
     caveZones,
+    caveEntrances,
+    currentCaveIndex: null,
     objectiveNodes: buildObjectiveNodes(contract.type)
   };
 }

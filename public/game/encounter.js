@@ -25,6 +25,8 @@ export function updateEncounter(state, input, dt) {
   if (input.tap('Minus')) encounter.targetZoom = clamp(encounter.targetZoom - 0.12, 0.85, 1.5);
   encounter.cameraZoom = approach(encounter.cameraZoom, encounter.targetZoom, 0.2);
 
+  maybeToggleCave(encounter, diver, input);
+
   const moveAccel = 250;
   const waterFriction = 0.26;
   const maxSpeed = 180;
@@ -44,14 +46,10 @@ export function updateEncounter(state, input, dt) {
   diver.x = clamp(diver.x + diver.vx * dt, 40, 980);
   diver.y = clamp(diver.y + diver.vy * dt, WATERLINE_Y, 540);
 
-  const nearBell = encounter.hasDiveBell && nearPoint(diver, encounter.diveBell, 52);
-  const o2Drain = nearBell ? 0.5 : 2.2;
-  diver.o2 = Math.max(0, diver.o2 - dt * o2Drain);
-  if (nearBell) diver.o2 = Math.min(130, diver.o2 + dt * 10);
-
-  const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  if (depthMeters > diver.maxDepth) {
-    diver.o2 = Math.max(0, diver.o2 - dt * 5 * encounter.depthPressure);
+  // TEMP: mission timer/fail pressure disabled for playtesting iteration.
+  // Keep meter value for UI continuity, but no drain or fail condition.
+  if (encounter.hasDiveBell && nearPoint(diver, encounter.diveBell, 52)) {
+    diver.o2 = Math.min(130, diver.o2 + dt * 8);
   }
 
   updateObjectiveProgress(encounter, input, dt);
@@ -60,14 +58,26 @@ export function updateEncounter(state, input, dt) {
   const objectivesDone = encounter.objectiveIndex >= encounter.contract.objectives.length;
   if (atBoat && objectivesDone && input.tap('KeyE')) {
     completeEncounter(state, encounter);
+  }
+}
+
+function maybeToggleCave(encounter, diver, input) {
+  if (!encounter.caveEntrances.length || !input.tap('KeyE')) return;
+
+  if (encounter.currentCaveIndex !== null) {
+    const exit = encounter.caveEntrances[encounter.currentCaveIndex];
+    diver.x = exit.x + 6;
+    diver.y = exit.y + 6;
+    encounter.currentCaveIndex = null;
     return;
   }
 
-  if (diver.o2 <= 0) {
-    encounter.failed = true;
-    state.lastResult = { success: false, pay: -60, title: encounter.contract.title };
-    state.money = Math.max(0, state.money - 60);
-    state.mode = Modes.RESULTS;
+  const entryIndex = encounter.caveEntrances.findIndex((entry) => nearPoint(diver, entry, 36));
+  if (entryIndex >= 0) {
+    const targetZone = encounter.caveZones[entryIndex];
+    diver.x = targetZone.x;
+    diver.y = targetZone.y;
+    encounter.currentCaveIndex = entryIndex;
   }
 }
 
@@ -149,8 +159,10 @@ function updateObjectiveProgress(encounter, input, dt) {
     }
 
     case 'wreck_explore': {
-      const inCave = encounter.caveZones.some((z) => insideZone(diver, z));
-      encounter.actionHint = inCave ? `Search wreck cache (${Math.round(encounter.objectiveProgress * 100)}%)` : 'Enter wreck cavity to search';
+      const inCave = encounter.currentCaveIndex !== null || encounter.caveZones.some((z) => insideZone(diver, z));
+      encounter.actionHint = inCave
+        ? `Search wreck cache (${Math.round(encounter.objectiveProgress * 100)}%)`
+        : 'Enter cave marker (E) then hold F to search cache';
       if (inCave && nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.9, 0, 1);
       if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
       break;
@@ -218,7 +230,6 @@ function drawUnderwaterShader(ctx, w, h, t) {
 
 function renderWorld(ctx, encounter, assets, state, w, h) {
   const diver = encounter.diver;
-
   const bob = Math.sin(state.elapsed * 2.2) * 3;
   if (assets.boat) ctx.drawImage(assets.boat, 130, 22 + bob, 120, 56);
 
@@ -234,6 +245,16 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
     ctx.beginPath();
     ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
     ctx.fill();
+  });
+
+  encounter.caveEntrances.forEach((entry, idx) => {
+    ctx.fillStyle = encounter.currentCaveIndex === idx ? '#77ddff' : '#f3c98d';
+    ctx.beginPath();
+    ctx.arc(entry.x, entry.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1c3140';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('E', entry.x - 4, entry.y + 4);
   });
 
   const icon = objectiveImage(assets, encounter.contract.type);
@@ -295,8 +316,8 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | F interact | E extract | +/- zoom', 20, 28);
-  ctx.fillText(`O2: ${Math.round(diver.o2)}  Depth: ${depthMeters}m/${diver.maxDepth}m  Zoom:${encounter.cameraZoom.toFixed(2)}x`, 20, 52);
+  ctx.fillText('Encounter - WASD swim | F interact | E extract/enter cave | +/- zoom', 20, 28);
+  ctx.fillText(`Test Mode: no mission timer/fail pressure active | Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
 
   renderObjectiveList(ctx, encounter.contract.objectives, encounter.objectiveIndex);
