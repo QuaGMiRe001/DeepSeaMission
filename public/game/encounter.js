@@ -2,6 +2,7 @@ import { Modes } from '../core/state.js';
 import { clamp } from '../core/util.js';
 
 const WATERLINE_Y = 80;
+const INTERIOR_BOUNDS = { left: 210, right: 1050, top: 130, bottom: 560 };
 
 function approach(current, target, factor) {
   return current + (target - current) * factor;
@@ -36,6 +37,43 @@ function getBoatPoint(encounter, elapsed) {
   };
 }
 
+function interiorPortalPoint(encounter) {
+  return encounter.interiorScene?.entry || null;
+}
+
+function updateAutoCamera(encounter, diver, boatPoint) {
+  const distance = Math.hypot(diver.x - boatPoint.x, diver.y - boatPoint.y);
+  const desiredView = 300 + distance + encounter.cameraPadding;
+  const desiredZoom = clamp(900 / desiredView, 0.72, 1.5);
+  const interiorBoost = encounter.inInterior ? 1.18 : 1;
+  encounter.targetZoom = encounter.autoCamera ? clamp(desiredZoom * interiorBoost, 0.72, 1.5) : encounter.targetZoom;
+}
+
+function updateDiveBellState(encounter, diver, input, dt) {
+  if (!encounter.hasDiveBell) return;
+
+  const nearBell = nearPoint(diver, encounter.diveBell, 42);
+  if (!encounter.diveBell.occupied && nearBell && input.tap('KeyE')) {
+    encounter.diveBell.occupied = true;
+    diver.vx = 0;
+    diver.vy = 0;
+  }
+
+  if (encounter.diveBell.occupied) {
+    if (input.down('KeyR')) encounter.diveBell.y = clamp(encounter.diveBell.y - 70 * dt, 130, 480);
+    if (input.down('KeyF')) encounter.diveBell.y = clamp(encounter.diveBell.y + 70 * dt, 130, 480);
+
+    diver.x = encounter.diveBell.x;
+    diver.y = encounter.diveBell.y;
+
+    if (input.tap('KeyE')) {
+      encounter.diveBell.occupied = false;
+      diver.x += 28;
+      diver.y += 14;
+    }
+  }
+}
+
 export function updateEncounter(state, input, dt) {
   const encounter = state.encounter;
   const diver = encounter.diver;
@@ -45,11 +83,17 @@ export function updateEncounter(state, input, dt) {
   encounter.surfaceX += Math.sin(state.elapsed * 0.35 + encounter.timer * 0.15) * dt * 9;
   encounter.surfaceX = clamp(encounter.surfaceX, 130, 870);
 
-  if (input.tap('Equal')) encounter.targetZoom = clamp(encounter.targetZoom + 0.12, 0.85, 1.5);
-  if (input.tap('Minus')) encounter.targetZoom = clamp(encounter.targetZoom - 0.12, 0.85, 1.5);
-  encounter.cameraZoom = approach(encounter.cameraZoom, encounter.targetZoom, 0.2);
+  if (input.tap('KeyP')) encounter.autoCamera = !encounter.autoCamera;
+  if (input.tap('BracketLeft')) encounter.cameraPadding = clamp(encounter.cameraPadding - 20, 80, 320);
+  if (input.tap('BracketRight')) encounter.cameraPadding = clamp(encounter.cameraPadding + 20, 80, 320);
+
+  if (!encounter.autoCamera) {
+    if (input.tap('Equal')) encounter.targetZoom = clamp(encounter.targetZoom + 0.12, 0.72, 1.5);
+    if (input.tap('Minus')) encounter.targetZoom = clamp(encounter.targetZoom - 0.12, 0.72, 1.5);
+  }
 
   maybeToggleCave(encounter, diver, input);
+  updateDiveBellState(encounter, diver, input, dt);
 
   const moveAccel = 215;
   const verticalAccel = 182;
@@ -65,28 +109,37 @@ export function updateEncounter(state, input, dt) {
   const targetVX = axisX * moveAccel * burst;
   const targetVY = axisY * verticalAccel * burst;
 
-  diver.vx = approach(diver.vx, targetVX, waterFriction) + currentX;
-  diver.vy = approach(diver.vy, targetVY, waterFriction);
+  if (!encounter.diveBell.occupied) {
+    diver.vx = approach(diver.vx, targetVX, waterFriction) + currentX;
+    diver.vy = approach(diver.vy, targetVY, waterFriction);
 
-  if (axisX === 0) diver.vx *= idleDrag;
-  if (axisY === 0) diver.vy *= idleDrag;
-  if (axisX === 0 && axisY === 0) diver.vy -= 8 * dt;
+    if (axisX === 0) diver.vx *= idleDrag;
+    if (axisY === 0) diver.vy *= idleDrag;
+    if (axisX === 0 && axisY === 0) diver.vy -= 8 * dt;
 
-  diver.vx = clamp(diver.vx, -maxSpeed, maxSpeed);
-  diver.vy = clamp(diver.vy, -maxSpeed, maxSpeed);
+    diver.vx = clamp(diver.vx, -maxSpeed, maxSpeed);
+    diver.vy = clamp(diver.vy, -maxSpeed, maxSpeed);
 
-  const swimSpeed = Math.hypot(diver.vx, diver.vy);
-  if (swimSpeed > 8) {
-    diver.heading = approachAngle(diver.heading || 0, Math.atan2(diver.vy, diver.vx), 0.24);
+    const swimSpeed = Math.hypot(diver.vx, diver.vy);
+    if (swimSpeed > 8) {
+      diver.heading = approachAngle(diver.heading || 0, Math.atan2(diver.vy, diver.vx), 0.24);
+    }
+    diver.kickPhase = (diver.kickPhase || 0) + dt * (2.6 + swimSpeed * 0.04);
+
+    if (encounter.inInterior) {
+      diver.x = clamp(diver.x + diver.vx * dt, INTERIOR_BOUNDS.left, INTERIOR_BOUNDS.right);
+      diver.y = clamp(diver.y + diver.vy * dt, INTERIOR_BOUNDS.top, INTERIOR_BOUNDS.bottom);
+    } else {
+      diver.x = clamp(diver.x + diver.vx * dt, 40, 980);
+      diver.y = clamp(diver.y + diver.vy * dt, WATERLINE_Y, 540);
+    }
   }
-  diver.kickPhase = (diver.kickPhase || 0) + dt * (2.6 + swimSpeed * 0.04);
-
-  diver.x = clamp(diver.x + diver.vx * dt, 40, 980);
-  diver.y = clamp(diver.y + diver.vy * dt, WATERLINE_Y, 540);
 
   // TEMP: mission timer/fail pressure disabled for playtesting iteration.
   // Keep meter value for UI continuity, but no drain or fail condition.
   const boatPoint = getBoatPoint(encounter, state.elapsed);
+  updateAutoCamera(encounter, diver, boatPoint);
+  encounter.cameraZoom = approach(encounter.cameraZoom, encounter.targetZoom, 0.18);
 
   if (encounter.hasDiveBell && nearPoint(diver, encounter.diveBell, 52)) {
     diver.o2 = Math.min(130, diver.o2 + dt * 8);
@@ -103,27 +156,38 @@ export function updateEncounter(state, input, dt) {
 
 function maybeToggleCave(encounter, diver, input) {
   const interactTap = input.tap('KeyE') || input.tap('KeyF');
-  if (!encounter.caveEntrances.length || !interactTap) return;
+  if (!encounter.caveEntrances.length || !interactTap || encounter.diveBell.occupied) return;
 
-  if (encounter.currentCaveIndex !== null) {
-    const exit = encounter.caveEntrances[encounter.currentCaveIndex];
-    diver.x = exit.x + 6;
-    diver.y = exit.y + 6;
-    encounter.currentCaveIndex = null;
+  if (encounter.inInterior) {
+    const portal = interiorPortalPoint(encounter);
+    if (portal && nearPoint(diver, portal, 46)) {
+      const exit = encounter.caveEntrances[encounter.currentCaveIndex || 0];
+      diver.x = exit.x + 10;
+      diver.y = exit.y + 8;
+      encounter.inInterior = false;
+      encounter.currentCaveIndex = null;
+    }
     return;
   }
 
-  const entryIndex = encounter.caveEntrances.findIndex((entry) => nearPoint(diver, entry, 52));
+  const entryIndex = encounter.caveEntrances.findIndex((entry) => nearPoint(diver, entry, 54));
   if (entryIndex >= 0) {
-    const targetZone = encounter.caveZones[entryIndex];
-    diver.x = targetZone.x;
-    diver.y = targetZone.y;
     encounter.currentCaveIndex = entryIndex;
+    if (encounter.interiorScene) {
+      const entry = interiorPortalPoint(encounter);
+      diver.x = entry.x + 20;
+      diver.y = entry.y;
+      encounter.inInterior = true;
+    } else {
+      const targetZone = encounter.caveZones[entryIndex];
+      diver.x = targetZone.x;
+      diver.y = targetZone.y;
+    }
   }
 }
 
 function getNearbyCaveEntrance(encounter, diver) {
-  if (!encounter.caveEntrances.length || encounter.interior?.active) return null;
+  if (!encounter.caveEntrances.length || encounter.inInterior) return null;
   return encounter.caveEntrances.find((entry) => nearPoint(diver, entry, 56)) || null;
 }
 
@@ -207,10 +271,10 @@ function updateObjectiveProgress(encounter, input, dt) {
     }
 
     case 'wreck_explore': {
-      const inCave = encounter.currentCaveIndex !== null || encounter.caveZones.some((z) => insideZone(diver, z));
+      const inCave = encounter.inInterior || encounter.currentCaveIndex !== null || encounter.caveZones.some((z) => insideZone(diver, z));
       encounter.actionHint = inCave
         ? `Search wreck cache (${Math.round(encounter.objectiveProgress * 100)}%)`
-        : 'Enter cave marker (E) then hold F to search cache';
+        : encounter.interiorScene ? 'Enter wreck hatch marker (E/F) to load interior scene' : 'Enter cave marker (E/F) then hold F to search cache';
       if (inCave && nearNode && input.down('KeyF')) encounter.objectiveProgress = clamp(encounter.objectiveProgress + dt * 0.9, 0, 1);
       if (encounter.objectiveProgress >= 1) completeStep(encounter, activeNode, objectives);
       break;
@@ -239,7 +303,13 @@ function updateObjectiveProgress(encounter, input, dt) {
   if (nearbyEntrance && encounter.contract.type !== 'wreck_explore') {
     encounter.actionHint += ' | Optional cavity nearby: press E/F to enter.';
   }
+
+  if (encounter.hasDiveBell) {
+    if (encounter.diveBell.occupied) encounter.actionHint += ' | Dive Bell: R ascend, F descend, E exit';
+    else if (nearPoint(diver, encounter.diveBell, 44)) encounter.actionHint += ' | Press E to enter Dive Bell';
+  }
 }
+
 
 function completeStep(encounter, node, objectives) {
   node.done = true;
@@ -280,6 +350,24 @@ function drawUnderwaterShader(ctx, w, h, t) {
   }
 }
 
+function drawInteriorBackdrop(ctx, w, h, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#1a1d22');
+  g.addColorStop(1, '#0b0d11');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(110,120,135,0.18)';
+  for (let y = 100; y < h; y += 34) {
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 24) {
+      const yy = y + Math.sin(x * 0.03 + y * 0.01 + t * 1.5) * 1.7;
+      if (x === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+}
+
 function renderWorld(ctx, encounter, assets, state, w, h) {
   const diver = encounter.diver;
   const boatPoint = getBoatPoint(encounter, state.elapsed);
@@ -300,22 +388,26 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
     ctx.strokeRect(encounter.diveBell.x - 18, encounter.diveBell.y - 24, 36, 36);
   }
 
-  encounter.caveZones.forEach((zone) => {
-    ctx.fillStyle = 'rgba(20,20,20,0.6)';
-    ctx.beginPath();
-    ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  if (!encounter.inInterior) {
+    encounter.caveZones.forEach((zone) => {
+      ctx.fillStyle = 'rgba(20,20,20,0.6)';
+      ctx.beginPath();
+      ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
 
-  encounter.caveEntrances.forEach((entry, idx) => {
-    ctx.fillStyle = encounter.currentCaveIndex === idx ? '#77ddff' : '#f3c98d';
-    ctx.beginPath();
-    ctx.arc(entry.x, entry.y, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#1c3140';
-    ctx.font = '11px sans-serif';
-    ctx.fillText('E', entry.x - 4, entry.y + 4);
-  });
+    encounter.caveEntrances.forEach((entry, idx) => {
+      ctx.fillStyle = encounter.currentCaveIndex === idx ? '#77ddff' : '#f3c98d';
+      ctx.beginPath();
+      ctx.arc(entry.x, entry.y, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1c3140';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('E', entry.x - 4, entry.y + 4);
+    });
+  } else if (encounter.interiorScene) {
+    renderInteriorScene(ctx, encounter.interiorScene);
+  }
 
   const icon = objectiveImage(assets, encounter.contract.type);
   encounter.objectiveNodes.forEach((node) => {
@@ -334,6 +426,43 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
   gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, WATERLINE_Y, w, h - WATERLINE_Y);
+}
+
+
+
+function renderInteriorScene(ctx, scene) {
+  scene.rooms.forEach((room) => {
+    ctx.fillStyle = '#2e3238';
+    ctx.fillRect(room.x, room.y, room.w, room.h);
+    ctx.strokeStyle = '#5a626d';
+    ctx.strokeRect(room.x, room.y, room.w, room.h);
+  });
+
+  ctx.strokeStyle = '#8ca0b3';
+  ctx.lineWidth = 8;
+  scene.corridors.forEach((c) => {
+    ctx.beginPath();
+    ctx.moveTo(c.x1, c.y1);
+    ctx.lineTo(c.x2, c.y2);
+    ctx.stroke();
+  });
+
+  const entry = scene.entry;
+  ctx.fillStyle = '#9de3ff';
+  ctx.beginPath();
+  ctx.arc(entry.x, entry.y, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#153347';
+  ctx.font = '11px sans-serif';
+  ctx.fillText('E', entry.x - 4, entry.y + 4);
+
+  scene.objectiveAnchors.forEach((point) => {
+    ctx.strokeStyle = 'rgba(255, 205, 110, 0.5)';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 16, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
 }
 
 
@@ -400,7 +529,6 @@ function drawSwimmingDiver(ctx, diver) {
     ctx.fill();
   }
 
-  ctx.restore();
 }
 
 
@@ -421,7 +549,8 @@ export function renderEncounter(ctx, state, w, h, assets) {
   }
   ctx.stroke();
 
-  drawUnderwaterShader(ctx, w, h, state.elapsed);
+  if (encounter.inInterior) drawInteriorBackdrop(ctx, w, h, state.elapsed);
+  else drawUnderwaterShader(ctx, w, h, state.elapsed);
 
   ctx.save();
   ctx.translate(w / 2, h / 2);
@@ -444,9 +573,10 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillStyle = '#d4ecff';
   ctx.font = '16px sans-serif';
   const depthMeters = Math.max(0, Math.round((diver.y - WATERLINE_Y) / 4));
-  ctx.fillText('Encounter - WASD swim | Shift burst | F interact | E extract/enter cave | +/- zoom | boat drifts', 20, 28);
+  ctx.fillText('Encounter - WASD swim | Shift burst | E interact/extract | F work/descend bell | R ascend bell | P auto-cam | [ ] padding', 20, 28);
   ctx.fillText(`Test Mode: no mission timer/fail pressure active | Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
+  ctx.fillText(`Cam: ${encounter.autoCamera ? 'AUTO' : 'MANUAL'} pad ${Math.round(encounter.cameraPadding)} zoom ${encounter.cameraZoom.toFixed(2)}`, 20, 96);
 
   renderObjectiveList(ctx, encounter.contract.objectives, encounter.objectiveIndex);
 }
@@ -455,6 +585,6 @@ function renderObjectiveList(ctx, objectives, index) {
   ctx.font = '14px sans-serif';
   objectives.forEach((objective, i) => {
     ctx.fillStyle = objective.done ? '#87d19b' : i === index ? '#ffde87' : '#b7d8e8';
-    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 600, 28 + i * 20);
+    ctx.fillText(`${objective.done ? '✓' : i === index ? '→' : '•'} ${objective.label}`, 600, 52 + i * 20);
   });
 }

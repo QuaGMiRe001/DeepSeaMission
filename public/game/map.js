@@ -98,6 +98,7 @@ function createEncounterState(aoi, contract, state) {
   const caveEntrances = caveZones.map((z, idx) => ({ x: z.x - z.r + 20 + idx * 8, y: z.y - z.r + 12 }));
 
   const spawnSurfaceX = clamp(aoi.x * 0.6, 160, 840);
+  const interiorScene = buildInteriorScene(aoi, contract);
 
   return {
     aoi,
@@ -105,7 +106,7 @@ function createEncounterState(aoi, contract, state) {
     deepMission,
     hasDiveBell: state.currentGear === 'divebell',
     surfaceX: spawnSurfaceX,
-    diveBell: { x: spawnSurfaceX + 140, y: 220 },
+    diveBell: { x: spawnSurfaceX + 140, y: 220, occupied: false },
     cameraZoom: 1,
     targetZoom: 1,
     diver: {
@@ -137,11 +138,15 @@ function createEncounterState(aoi, contract, state) {
     caveZones,
     caveEntrances,
     currentCaveIndex: null,
-    objectiveNodes: buildObjectiveNodes(contract.type)
+    interiorScene,
+    inInterior: false,
+    objectiveNodes: buildObjectiveNodes(contract.type, interiorScene),
+    cameraPadding: 180,
+    autoCamera: true
   };
 }
 
-function buildObjectiveNodes(type) {
+function buildObjectiveNodes(type, interiorScene) {
   if (type === 'place_beacons' || type === 'scan_sweep') {
     return [
       { x: 660, y: 290, done: false },
@@ -150,6 +155,9 @@ function buildObjectiveNodes(type) {
     ];
   }
   if (type === 'wreck_explore') {
+    if (interiorScene) {
+      return interiorScene.objectiveAnchors.map((point) => ({ x: point.x, y: point.y, done: false }));
+    }
     return [
       { x: 740, y: 430, done: false },
       { x: 890, y: 505, done: false }
@@ -157,6 +165,71 @@ function buildObjectiveNodes(type) {
   }
   if (type === 'rescue') return [{ x: 820, y: 470, done: false }];
   return [{ x: 770, y: 430, done: false }];
+}
+
+
+function buildInteriorScene(aoi, contract) {
+  if (contract.type !== 'wreck_explore') return null;
+
+  const seed = Math.abs(Math.floor((aoi.x * 0.37 + aoi.y * 0.19 + aoi.depth * 1.1) % 1000));
+  const variants = [
+    {
+      name: 'Fractured Cargo Deck',
+      rooms: [
+        { x: 280, y: 200, w: 160, h: 120 },
+        { x: 480, y: 200, w: 170, h: 120 },
+        { x: 690, y: 250, w: 150, h: 130 },
+        { x: 870, y: 290, w: 110, h: 110 }
+      ],
+      corridors: [
+        { x1: 440, y1: 255, x2: 480, y2: 255 },
+        { x1: 650, y1: 255, x2: 690, y2: 315 },
+        { x1: 840, y1: 315, x2: 870, y2: 345 }
+      ],
+      objectiveAnchors: [{ x: 530, y: 255 }, { x: 920, y: 340 }],
+      entry: { x: 305, y: 255 }
+    },
+    {
+      name: 'Silted Engineering Maze',
+      rooms: [
+        { x: 260, y: 220, w: 140, h: 140 },
+        { x: 440, y: 220, w: 120, h: 120 },
+        { x: 600, y: 210, w: 150, h: 140 },
+        { x: 790, y: 250, w: 130, h: 120 },
+        { x: 940, y: 280, w: 90, h: 110 }
+      ],
+      corridors: [
+        { x1: 400, y1: 290, x2: 440, y2: 280 },
+        { x1: 560, y1: 280, x2: 600, y2: 280 },
+        { x1: 750, y1: 280, x2: 790, y2: 310 },
+        { x1: 920, y1: 310, x2: 940, y2: 335 }
+      ],
+      objectiveAnchors: [{ x: 670, y: 280 }, { x: 985, y: 335 }],
+      entry: { x: 285, y: 290 }
+    },
+    {
+      name: 'Split Pressure Bulkheads',
+      rooms: [
+        { x: 280, y: 260, w: 180, h: 110 },
+        { x: 500, y: 220, w: 130, h: 100 },
+        { x: 680, y: 220, w: 150, h: 120 },
+        { x: 860, y: 230, w: 150, h: 110 }
+      ],
+      corridors: [
+        { x1: 460, y1: 310, x2: 500, y2: 270 },
+        { x1: 630, y1: 270, x2: 680, y2: 280 },
+        { x1: 830, y1: 280, x2: 860, y2: 280 }
+      ],
+      objectiveAnchors: [{ x: 750, y: 280 }, { x: 940, y: 280 }],
+      entry: { x: 315, y: 310 }
+    }
+  ];
+
+  const variant = variants[seed % variants.length];
+  return {
+    ...variant,
+    scale: 1.22
+  };
 }
 
 function drawRotatedBoat(ctx, image, x, y, heading) {
