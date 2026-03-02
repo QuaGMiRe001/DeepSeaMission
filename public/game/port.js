@@ -40,39 +40,65 @@ function buyUpgrade(state, id, cost) {
 }
 
 export function renderPort(ctx, state, w, h, assets) {
-  ctx.fillStyle = '#153547';
+  ctx.fillStyle = '#0f2735';
+  ctx.fillRect(0, 0, w, h);
+
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(125, 214, 255, 0.12)');
+  g.addColorStop(1, 'rgba(10, 22, 31, 0.2)');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = '#88d7ff';
-  ctx.font = '28px sans-serif';
+  ctx.font = '700 30px sans-serif';
   const currentPort = state.world.ports.find((p) => p.id === state.currentPortId);
   ctx.fillText(`Port - ${currentPort?.name || 'Harbor'}`, 40, 60);
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = '#b9e8ff';
+  ctx.fillText('Select contract with [1-5] • Enter to launch • [6]/[0] loadout • [7-9]/[B] upgrades', 40, 88);
 
   if (assets.boat) ctx.drawImage(assets.boat, 820, 40, 180, 90);
 
+  ctx.fillStyle = '#1d3b4e';
+  ctx.fillRect(40, 112, 470, 78);
+  ctx.strokeStyle = '#3d6a82';
+  ctx.strokeRect(40, 112, 470, 78);
+
   ctx.font = '18px sans-serif';
   ctx.fillStyle = '#d6f0ff';
-  ctx.fillText('Choose contract [1-5], press Enter to depart', 40, 100);
-  ctx.fillText('Buy upgrades: [7] Tank [8] Lamp [9] Cutter [B] Dive Bell', 40, 128);
-  ctx.fillText(`Gear loadout: [6] Diver [0] Dive Bell   Active: ${state.currentGear.toUpperCase()}`, 40, 156);
+  ctx.fillText('Upgrades: [7] Tank [8] Lamp [9] Cutter [B] Dive Bell', 54, 142);
+  ctx.fillText(`Loadout: [6] Diver [0] Dive Bell  | Active: ${state.currentGear.toUpperCase()}`, 54, 169);
 
-  ctx.fillStyle = '#264e63';
-  ctx.fillRect(40, 184, 920, 320);
+  ctx.fillStyle = '#1a3343';
+  ctx.fillRect(40, 204, 960, 330);
+  ctx.strokeStyle = '#396781';
+  ctx.strokeRect(40, 204, 960, 330);
   ctx.fillStyle = '#aee8ff';
-  ctx.fillText(`Credits: $${state.money}`, 55, 216);
-  ctx.fillText(`Owned upgrades: ${state.upgradesOwned.join(', ') || 'none'}`, 55, 244);
+  ctx.fillText(`Credits: $${state.money}`, 55, 236);
+  ctx.fillText(`Owned upgrades: ${state.upgradesOwned.join(', ') || 'none'}`, 55, 264);
 
-  ctx.fillText('Available contracts:', 55, 278);
+  ctx.fillStyle = '#ffdf95';
+  ctx.fillText('Contract Board', 55, 294);
   state.contracts.forEach((contract, idx) => {
-    const y = 308 + idx * 32;
+    const y = 316 + idx * 58;
     const active = state.selectedContract?.id === contract.id;
-    ctx.fillStyle = active ? '#ffde87' : '#cbe8ff';
+    ctx.fillStyle = active ? 'rgba(255, 221, 130, 0.22)' : 'rgba(30, 56, 73, 0.65)';
+    ctx.fillRect(55, y - 24, 930, 44);
+    ctx.strokeStyle = active ? '#ffd46f' : '#315c75';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.strokeRect(55, y - 24, 930, 44);
+
+    ctx.fillStyle = active ? '#ffdf95' : '#d6efff';
+    ctx.font = active ? '700 17px sans-serif' : '16px sans-serif';
     const modLabel = contract.modifier ? ` + ${contract.modifier.label}` : '';
     const req = contract.depth > 70 ? 'Dive Bell' : 'Diver';
     ctx.fillText(
-      `[${idx + 1}] ${contract.title}${modLabel} | ${contract.aoiType.toUpperCase()} ${contract.depth}m | ${req} | $${contract.pay}`,
-      65,
+      `${active ? '▶' : ' '} [${idx + 1}] ${contract.title}${modLabel}`,
+      70,
       y
     );
+    ctx.fillStyle = '#9ecbe3';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(`${contract.aoiType.toUpperCase()} • ${contract.depth}m • ${req} • $${contract.pay}`, 78, y + 18);
   });
 }

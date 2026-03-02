@@ -207,7 +207,8 @@ function updateObjectiveProgress(encounter, input, dt) {
   }
 
   const activeNode = encounter.objectiveNodes.find((node) => !node.done) || encounter.objectiveNodes[encounter.objectiveNodes.length - 1];
-  const nearNode = nearPoint(diver, activeNode, 45);
+  const nearNode = nearPoint(diver, activeNode, 52);
+  const nodeDistance = Math.round(Math.hypot(diver.x - activeNode.x, diver.y - activeNode.y));
 
   switch (encounter.contract.type) {
     case 'place_beacons':
@@ -308,6 +309,10 @@ function updateObjectiveProgress(encounter, input, dt) {
     if (encounter.diveBell.occupied) encounter.actionHint += ' | Dive Bell: R ascend, F descend, E exit';
     else if (nearPoint(diver, encounter.diveBell, 44)) encounter.actionHint += ' | Press E to enter Dive Bell';
   }
+
+  encounter.actionHint += nearNode
+    ? ' | In range: hold F'
+    : ` | Active target: ${nodeDistance}px`;
 }
 
 
@@ -410,6 +415,7 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
   }
 
   const icon = objectiveImage(assets, encounter.contract.type);
+  const activeNode = encounter.objectiveNodes.find((node) => !node.done);
   encounter.objectiveNodes.forEach((node) => {
     if (node.done) {
       ctx.fillStyle = '#6ec48d';
@@ -417,6 +423,15 @@ function renderWorld(ctx, encounter, assets, state, w, h) {
       return;
     }
     if (icon) ctx.drawImage(icon, node.x - 14, node.y - 14, 28, 28);
+
+    if (activeNode === node) {
+      const pulse = 18 + Math.sin(state.elapsed * 4) * 4;
+      ctx.strokeStyle = 'rgba(255, 220, 130, 0.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, pulse, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   });
 
   drawSwimmingDiver(ctx, diver);
@@ -577,6 +592,10 @@ export function renderEncounter(ctx, state, w, h, assets) {
   ctx.fillText(`Test Mode: no mission timer/fail pressure active | Depth: ${depthMeters}m/${diver.maxDepth}m`, 20, 52);
   ctx.fillText(encounter.actionHint, 20, 74);
   ctx.fillText(`Cam: ${encounter.autoCamera ? 'AUTO' : 'MANUAL'} pad ${Math.round(encounter.cameraPadding)} zoom ${encounter.cameraZoom.toFixed(2)}`, 20, 96);
+  if (encounter.inInterior && encounter.interiorScene) {
+    ctx.fillStyle = '#ffc98b';
+    ctx.fillText(`Interior Scene: ${encounter.interiorScene.name}`, 20, 118);
+  }
 
   renderObjectiveList(ctx, encounter.contract.objectives, encounter.objectiveIndex);
 }

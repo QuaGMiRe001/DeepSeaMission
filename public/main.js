@@ -87,7 +87,10 @@ function meterRow(label, value) {
 
 function updateHud() {
   const contracts = state.contracts
-    .map((c, idx) => `<li>${idx + 1}. ${contractSummary(c)} ${state.selectedContract?.id === c.id ? '• active' : ''}</li>`)
+    .map((c, idx) => {
+      const active = state.selectedContract?.id === c.id;
+      return `<li class="${active ? 'active' : ''}"><span class="slot">${idx + 1}</span>${contractSummary(c)}${active ? '<span class="tag">ACTIVE</span>' : ''}</li>`;
+    })
     .join('');
 
   const upgrades = state.upgradesOwned.map((u) => getUpgradeLabel(u)).join(', ') || 'none';
@@ -111,7 +114,7 @@ function updateHud() {
     </section>
     <section class="card">
       <h3>Contracts</h3>
-      <ul>${contracts}</ul>
+      <ul class="contract-list">${contracts}</ul>
       <p class="small">Port select: [1-5]</p>
     </section>
     <section class="card">

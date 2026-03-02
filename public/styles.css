@@ -43,6 +43,51 @@ canvas {
   box-shadow: 0 0 0 1px rgba(145, 220, 255, 0.08) inset;
 }
 
+.contract-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contract-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid #234255;
+  border-radius: 8px;
+  background: rgba(20, 41, 55, 0.6);
+  font-size: 0.83rem;
+}
+
+.contract-list li.active {
+  border-color: #ffd37b;
+  background: rgba(93, 67, 28, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 214, 133, 0.24) inset;
+}
+
+.contract-list .slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #204259;
+  color: #b9e8ff;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.contract-list .tag {
+  margin-left: auto;
+  color: #ffdb91;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
 h3 { margin: 0 0 8px; }
 .small { opacity: 0.9; font-size: 0.9rem; }
 .key { color: var(--accent); font-weight: 700; }
