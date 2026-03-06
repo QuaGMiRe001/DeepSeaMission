@@ -1,0 +1,6 @@
+[
+  { "id": "tank_1", "name": "Larger Air Tank", "cost": 300, "effects": { "o2Max": 1.25 } },
+  { "id": "lamp_1", "name": "Brighter Lamp", "cost": 220, "effects": { "lampRange": 1.3 } },
+  { "id": "cutter_1", "name": "Improved Cutter", "cost": 260, "effects": { "cutSpeed": 1.4 } },
+  { "id": "divebell_1", "name": "Dive Bell Retrofit", "cost": 520, "effects": { "unlockGear": "divebell" } }
+]

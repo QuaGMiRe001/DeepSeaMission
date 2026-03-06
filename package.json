@@ -1,0 +1,9 @@
+{
+  "name": "deep-sea-mission",
+  "version": "0.1.0",
+  "description": "Single-player 2D deep sea mission prototype",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  }
+}
